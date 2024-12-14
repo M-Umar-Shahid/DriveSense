@@ -6,7 +6,7 @@ class MonitoringPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF0A0E21), // Dark background color
+      backgroundColor: Colors.white, // Light background color
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -18,7 +18,7 @@ class MonitoringPage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
-                    icon: Icon(Icons.arrow_back, color: Colors.white),
+                    icon: Icon(Icons.arrow_back, color: Colors.black),
                     onPressed: () {
                       Navigator.pop(context);
                     },
@@ -26,13 +26,13 @@ class MonitoringPage extends StatelessWidget {
                   Text(
                     'Real time Monitoring',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: Colors.black,
                       fontSize: 18.0,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   IconButton(
-                    icon: Icon(Icons.settings, color: Colors.white),
+                    icon: Icon(Icons.settings, color: Colors.black),
                     onPressed: () {},
                   ),
                 ],
@@ -44,7 +44,7 @@ class MonitoringPage extends StatelessWidget {
               Text(
                 "Driver's View",
                 style: TextStyle(
-                  color: Colors.white,
+                  color: Colors.black,
                   fontSize: 16.0,
                   fontWeight: FontWeight.bold,
                 ),
@@ -89,7 +89,7 @@ class MonitoringPage extends StatelessWidget {
               Text(
                 "Driver's Status",
                 style: TextStyle(
-                  color: Colors.white,
+                  color: Colors.black,
                   fontSize: 16.0,
                   fontWeight: FontWeight.bold,
                 ),
@@ -110,7 +110,7 @@ class MonitoringPage extends StatelessWidget {
               Text(
                 'Recent Alerts',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: Colors.black,
                   fontSize: 16.0,
                   fontWeight: FontWeight.bold,
                 ),
@@ -138,15 +138,20 @@ class MonitoringPage extends StatelessWidget {
   Widget _statusIndicator(String label, Color color) {
     return Column(
       children: [
-        Container(
-          width: 50.0,
-          height: 50.0,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color.withOpacity(0.2),
-          ),
-          child: Center(
-            child: Container(
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: 60.0,
+              height: 60.0,
+              child: CircularProgressIndicator(
+                value: 0.5, // Adjust value dynamically as needed
+                strokeWidth: 5.0,
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+                backgroundColor: Colors.grey[300],
+              ),
+            ),
+            Container(
               width: 30.0,
               height: 30.0,
               decoration: BoxDecoration(
@@ -154,13 +159,13 @@ class MonitoringPage extends StatelessWidget {
                 color: color,
               ),
             ),
-          ),
+          ],
         ),
         SizedBox(height: 5.0),
         Text(
           label,
           style: TextStyle(
-            color: Colors.white,
+            color: Colors.black,
             fontSize: 12.0,
           ),
         ),
@@ -169,36 +174,40 @@ class MonitoringPage extends StatelessWidget {
   }
 
   Widget _alertTile(String alert, String time) {
-    return ListTile(
-      contentPadding: EdgeInsets.symmetric(horizontal: 0.0),
-      leading: Icon(Icons.warning, color: Colors.redAccent),
-      title: Text(
-        alert,
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 14.0,
+    return Column(
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.symmetric(horizontal: 0.0),
+          leading: Icon(Icons.warning, color: Colors.redAccent),
+          title: Text(
+            alert,
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: 14.0,
+            ),
+          ),
+          subtitle: Text(
+            time,
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 12.0,
+            ),
+          ),
+          trailing: Text(
+            'Clear',
+            style: TextStyle(
+              color: Colors.blueAccent,
+              fontSize: 12.0,
+            ),
+          ),
         ),
-      ),
-      subtitle: Text(
-        time,
-        style: TextStyle(
-          color: Colors.grey,
-          fontSize: 12.0,
-        ),
-      ),
-      trailing: Text(
-        'Clear',
-        style: TextStyle(
-          color: Colors.blueAccent,
-          fontSize: 12.0,
-        ),
-      ),
+      ],
     );
   }
 
   Widget _bottomNavigationBar() {
     return BottomNavigationBar(
-      backgroundColor: Color(0xFF0A0E21),
+      backgroundColor: Colors.white,
       type: BottomNavigationBarType.fixed,
       selectedItemColor: Colors.blueAccent,
       unselectedItemColor: Colors.grey,
