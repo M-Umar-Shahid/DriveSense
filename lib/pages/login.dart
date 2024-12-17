@@ -1,7 +1,9 @@
-import 'package:drivesense/pages/dashboard.dart';
+import 'package:drivesense/pages/bottom_navigation.dart';
 import 'package:drivesense/pages/forgot_password.dart';
 import 'package:drivesense/pages/signup.dart';
 import 'package:flutter/material.dart';
+
+import 'dashboard.dart';
 
 class LoginPage extends StatelessWidget {
   const LoginPage({super.key});
@@ -111,7 +113,7 @@ class LoginPage extends StatelessWidget {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const DashboardPage()),
+                      MaterialPageRoute(builder: (context) => const BottomNavigation()),
                     );
                   },
                   style: ElevatedButton.styleFrom(
