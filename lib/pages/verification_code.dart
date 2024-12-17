@@ -1,6 +1,9 @@
+import 'package:drivesense/pages/new_password.dart';
 import 'package:flutter/material.dart';
 
 class VerificationCodePage extends StatelessWidget {
+  const VerificationCodePage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -12,7 +15,7 @@ class VerificationCodePage extends StatelessWidget {
             children: [
               // Back Button
               IconButton(
-                icon: Icon(Icons.arrow_back),
+                icon: const Icon(Icons.arrow_back),
                 onPressed: () {
                   Navigator.pop(context);
                 },
@@ -21,7 +24,7 @@ class VerificationCodePage extends StatelessWidget {
               SizedBox(height: 20.0),
 
               // Title
-              Text(
+              const Text(
                 'Enter Verification code',
                 style: TextStyle(
                   fontSize: 28.0,
@@ -29,10 +32,10 @@ class VerificationCodePage extends StatelessWidget {
                 ),
               ),
 
-              SizedBox(height: 10.0),
+              const SizedBox(height: 10.0),
 
               // Subtitle
-              Text(
+              const Text(
                 'We have sent verification code to your Phone number and Email',
                 style: TextStyle(
                   fontSize: 16.0,
@@ -40,7 +43,7 @@ class VerificationCodePage extends StatelessWidget {
                 ),
               ),
 
-              SizedBox(height: 30.0),
+              const SizedBox(height: 30.0),
 
               // Verification Code Fields
               Row(
@@ -70,7 +73,7 @@ class VerificationCodePage extends StatelessWidget {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: () {},
-                  child: Text(
+                  child: const Text(
                     'Resend',
                     style: TextStyle(
                       color: Color(0xFF1976D2),
@@ -84,7 +87,12 @@ class VerificationCodePage extends StatelessWidget {
 
               // Next Button
               ElevatedButton(
-                onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const NewPasswordPage()),
+                    );
+                  },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Color(0xFF1976D2),
                   padding: EdgeInsets.symmetric(vertical: 16.0),
@@ -92,7 +100,7 @@ class VerificationCodePage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10.0),
                   ),
                 ),
-                child: Center(
+                child: const Center(
                   child: Text(
                     'Next',
                     style: TextStyle(

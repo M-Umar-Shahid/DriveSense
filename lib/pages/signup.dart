@@ -1,3 +1,4 @@
+import 'package:drivesense/pages/login.dart';
 import 'package:flutter/material.dart';
 
 class SignUpPage extends StatelessWidget {
@@ -145,7 +146,7 @@ class SignUpPage extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10.0),
                     ),
                   ),
-                  child: Center(
+                  child: const Center(
                     child: Text(
                       'Sign Up With Google',
                       style: TextStyle(
@@ -157,14 +158,14 @@ class SignUpPage extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 20.0),
+                const SizedBox(height: 20.0),
 
                 // Login Prompt
                 Center(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
+                      const Text(
                         'Already have an account? ',
                         style: TextStyle(
                           fontSize: 16.0,
@@ -172,8 +173,13 @@ class SignUpPage extends StatelessWidget {
                         ),
                       ),
                       TextButton(
-                        onPressed: () {},
-                        child: Text(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const LoginPage()),
+                          );
+                        },
+                        child: const Text(
                           'Login',
                           style: TextStyle(
                             fontSize: 16.0,

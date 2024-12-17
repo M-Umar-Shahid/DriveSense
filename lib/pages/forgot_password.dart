@@ -1,3 +1,4 @@
+import 'package:drivesense/pages/verification_code.dart';
 import 'package:flutter/material.dart';
 
 class ForgotPasswordPage extends StatelessWidget {
@@ -15,16 +16,16 @@ class ForgotPasswordPage extends StatelessWidget {
               children: [
                 // Back Button
                 IconButton(
-                  icon: Icon(Icons.arrow_back),
+                  icon: const Icon(Icons.arrow_back),
                   onPressed: () {
                     Navigator.pop(context);
                   },
                 ),
 
-                SizedBox(height: 20.0),
+                const SizedBox(height: 20.0),
 
                 // Title
-                Text(
+                const Text(
                   'Forgot Your Password',
                   style: TextStyle(
                     fontSize: 28.0,
@@ -55,19 +56,6 @@ class ForgotPasswordPage extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 30.0),
-
-                // Name TextField
-                TextField(
-                  decoration: InputDecoration(
-                    labelText: 'Name',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    hintText: 'Enter your name',
-                  ),
-                ),
-
                 SizedBox(height: 20.0),
 
                 // Email TextField
@@ -85,17 +73,22 @@ class ForgotPasswordPage extends StatelessWidget {
 
                 // Login Button
                 ElevatedButton(
-                  onPressed: () {},
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const VerificationCodePage()),
+                      );
+                    },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF1976D2),
-                    padding: EdgeInsets.symmetric(vertical: 16.0),
+                    backgroundColor: const Color(0xFF1976D2),
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10.0),
                     ),
                   ),
-                  child: Center(
+                  child: const Center(
                     child: Text(
-                      'Login',
+                      'Get Verification Code',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 16.0,

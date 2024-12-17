@@ -1,4 +1,6 @@
 import 'package:drivesense/pages/dashboard.dart';
+import 'package:drivesense/pages/forgot_password.dart';
+import 'package:drivesense/pages/signup.dart';
 import 'package:flutter/material.dart';
 
 class LoginPage extends StatelessWidget {
@@ -87,8 +89,13 @@ class LoginPage extends StatelessWidget {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: () {},
-                    child: Text(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ForgotPasswordPage()),
+                      );
+                    },
+                    child: const Text(
                       'Forgot Password',
                       style: TextStyle(
                         color: Color(0xFF1976D2),
@@ -184,7 +191,7 @@ class LoginPage extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
+                      const Text(
                         "Don't have an account? ",
                         style: TextStyle(
                           fontSize: 16.0,
@@ -192,8 +199,13 @@ class LoginPage extends StatelessWidget {
                         ),
                       ),
                       TextButton(
-                        onPressed: () {},
-                        child: Text(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const SignUpPage()),
+                          );
+                        },
+                        child: const Text(
                           'Sign Up',
                           style: TextStyle(
                             fontSize: 16.0,

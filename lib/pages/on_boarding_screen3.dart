@@ -1,5 +1,7 @@
 import 'package:drivesense/animations/FadeInImage.dart';
 import 'package:drivesense/components/CustomBackButton.dart';
+import 'package:drivesense/components/CustomSkipButton.dart';
+import 'package:drivesense/pages/on_boarding_screen2.dart';
 
 import 'getting_started.dart';
 import 'package:flutter/material.dart';
@@ -19,7 +21,14 @@ class OnboardingScreen3 extends StatelessWidget {
               // Back Button
               Align(
                 alignment: Alignment.topLeft,
-                child: CustomBackButton(onPressed: (){})
+                child: Padding(padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
+                    child: CustomBackButton(onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const OnboardingScreen2()),
+                      );
+                    },)
+                ),
               ),
 
               // Illustration
@@ -64,23 +73,12 @@ class OnboardingScreen3 extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   // Skip Button
-                  TextButton(
-                    onPressed: () {},
-                    style: TextButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(50.0),
-                      ),
-                      side: const BorderSide(color: Colors.blue),
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
-                    ),
-                    child: const Text(
-                      'Skip',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        fontSize: 16.0,
-                      ),
-                    ),
-                  ),
+                  CustomSkipButton(onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const GettingStarted()),
+                    );
+                  }),
 
                   // Next Button
                   ElevatedButton(

@@ -1,4 +1,5 @@
 import 'package:drivesense/pages/monitoring_screen.dart';
+import 'package:drivesense/pages/navigation_screen.dart';
 import 'package:flutter/material.dart';
 
 class DashboardPage extends StatelessWidget {
@@ -14,18 +15,8 @@ class DashboardPage extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Back Button
-              Align(
-                alignment: Alignment.topLeft,
-                child: IconButton(
-                  icon: Icon(Icons.arrow_back),
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
 
-              SizedBox(height: 20.0),
+              const SizedBox(height: 60.0),
 
               // Logo and Title
               Center(
@@ -42,10 +33,10 @@ class DashboardPage extends StatelessWidget {
                       ),
                     ),
 
-                    SizedBox(height: 10.0),
+                    const SizedBox(height: 10.0),
 
                     // Title
-                    Text(
+                    const Text(
                       'Drive Sense',
                       style: TextStyle(
                         fontSize: 24.0,
@@ -86,7 +77,12 @@ class DashboardPage extends StatelessWidget {
                   CircularButton(
                     text: 'Start Navigation',
                     logoPath: 'assets/images/map-icon.png', // Replace with your microphone logo path
-                    onPressed: () {},
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const MapScreen()),
+                        );
+                      },
                   ),
                   SizedBox(height: 20.0),
                   CircularButton(
@@ -122,8 +118,8 @@ class CircularButton extends StatelessWidget {
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        shape: CircleBorder(), backgroundColor: Color(0xFF1976D2),
-        padding: EdgeInsets.all(30.0),
+        shape: const CircleBorder(), backgroundColor: const Color(0xFF1976D2),
+        padding: const EdgeInsets.all(30.0),
         elevation: 5.0,
       ),
       child: Column(
@@ -134,10 +130,10 @@ class CircularButton extends StatelessWidget {
             width: 30.0,
             height: 30.0,
           ),
-          SizedBox(height: 5.0),
+          const SizedBox(height: 5.0),
           Text(
             text,
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 14.0,
             ),
@@ -147,7 +143,3 @@ class CircularButton extends StatelessWidget {
     );
   }
 }
-
-void main() => runApp(MaterialApp(
-  home: DashboardPage(),
-));

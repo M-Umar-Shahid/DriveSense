@@ -17,6 +17,7 @@ dependencies:
   # iOS style icons
   cupertino_icons: ^1.0.8
   lottie: ^3.2.0
+  google_maps_flutter: ^2.10.0
 
 dev_dependencies:
   flutter_test:

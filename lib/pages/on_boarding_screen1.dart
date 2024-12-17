@@ -1,5 +1,7 @@
 import 'package:drivesense/animations/FadeInImage.dart';
+import 'package:drivesense/components/CustomSkipButton.dart';
 import 'package:flutter/material.dart';
+import 'getting_started.dart';
 import 'on_boarding_screen2.dart';
 
 class OnboardingScreen1 extends StatelessWidget {
@@ -21,7 +23,7 @@ class OnboardingScreen1 extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
                   child: FadeInImageWidget(
-                    imagePath: 'assets/images/onboarding1.png', // Pass the image path here
+                    imagePath: 'assets/images/onboarding1.png',
                   ),
 
                 ),
@@ -51,30 +53,19 @@ class OnboardingScreen1 extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
 
-              Spacer(flex: 1),
+              const Spacer(flex: 1),
 
               // Skip and Next Buttons
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   // Skip Button
-                  TextButton(
-                    onPressed: () {},
-                    style: TextButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(50.0),
-                      ),
-                      side: const BorderSide(color: Colors.blue),
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
-                    ),
-                    child: const Text(
-                      'Skip',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        fontSize: 16.0,
-                      ),
-                    ),
-                  ),
+                  CustomSkipButton(onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const GettingStarted()),
+                    );
+                  }),
 
                   // Next Button
                   ElevatedButton(
