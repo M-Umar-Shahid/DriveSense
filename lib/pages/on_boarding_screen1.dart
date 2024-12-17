@@ -1,3 +1,4 @@
+import 'package:drivesense/animations/FadeInImage.dart';
 import 'package:flutter/material.dart';
 import 'on_boarding_screen2.dart';
 
@@ -13,24 +14,16 @@ class OnboardingScreen1 extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              // Back Button
-              Align(
-                alignment: Alignment.topLeft,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () {},
-                ),
-              ),
 
               // Illustration
-              Expanded(
+              const Expanded(
                 flex: 3,
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Image.asset(
-                    'assets/images/onboarding1.png',
-                    fit: BoxFit.contain,
+                  child: FadeInImageWidget(
+                    imagePath: 'assets/images/onboarding1.png', // Pass the image path here
                   ),
+
                 ),
               ),
 

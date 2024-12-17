@@ -1,3 +1,6 @@
+import 'package:drivesense/animations/FadeInImage.dart';
+import 'package:drivesense/components/CustomBackButton.dart';
+
 import 'getting_started.dart';
 import 'package:flutter/material.dart';
 
@@ -16,20 +19,16 @@ class OnboardingScreen3 extends StatelessWidget {
               // Back Button
               Align(
                 alignment: Alignment.topLeft,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () {},
-                ),
+                child: CustomBackButton(onPressed: (){})
               ),
 
               // Illustration
-              Expanded(
+              const Expanded(
                 flex: 3,
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Image.asset(
-                    'assets/images/onboarding3.png',
-                    fit: BoxFit.contain,
+                  child: FadeInImageWidget(
+                    imagePath: 'assets/images/onboarding3.png',
                   ),
                 ),
               ),

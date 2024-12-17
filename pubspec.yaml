@@ -16,6 +16,7 @@ dependencies:
 
   # iOS style icons
   cupertino_icons: ^1.0.8
+  lottie: ^3.2.0
 
 dev_dependencies:
   flutter_test:
@@ -28,6 +29,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - assets/animations/
 
   fonts:
     - family: Poppins
