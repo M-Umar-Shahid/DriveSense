@@ -1,5 +1,8 @@
+import 'package:drivesense/components/CustomSettingButton.dart';
+import 'package:drivesense/pages/analytics_page.dart';
 import 'package:drivesense/pages/monitoring_screen.dart';
 import 'package:drivesense/pages/navigation_screen.dart';
+import 'package:drivesense/pages/settings.dart';
 import 'package:flutter/material.dart';
 
 class Dashboard extends StatelessWidget {
@@ -17,9 +20,13 @@ class Dashboard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Align(
                 alignment: Alignment.centerRight,
-                child: IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.settings, size: 28.0, color: Colors.black54),
+                child: Padding(padding: const EdgeInsetsDirectional.fromSTEB(0, 10, 0, 0),
+                    child: CustomSettingButton(onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const SettingsPage()),
+                      );
+                    },)
                 ),
               ),
             ),
@@ -67,7 +74,7 @@ class Dashboard extends StatelessWidget {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const SignUpPage()),
+                        MaterialPageRoute(builder: (context) => const AnalyticsPage()),
                       );
                     },
                     child: _bottomWidget(

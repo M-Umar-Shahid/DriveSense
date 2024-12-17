@@ -19,10 +19,12 @@ dependencies:
   lottie: ^3.2.0
   google_maps_flutter: ^2.10.0
   curved_navigation_bar: ^1.0.3
+  video_player: ^2.8.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  fl_chart: ^0.63.0
 
   # Recommended lints for good coding practices
   flutter_lints: ^4.0.0

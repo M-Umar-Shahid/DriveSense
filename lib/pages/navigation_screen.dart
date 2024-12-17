@@ -75,64 +75,6 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ],
       ),
-
-      // Bottom Navigation Bar
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 2, // Map tab is selected
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels: true,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.camera),
-            label: 'Camera',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map),
-            label: 'Map',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.analytics),
-            label: 'Analytics',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
-        onTap: (index) {
-          // Add your navigation logic here
-          switch (index) {
-            case 0:
-            // Navigate to Home
-              break;
-            case 1:
-            // Navigate to Camera
-              break;
-            case 2:
-            // Stay on Map
-              break;
-            case 3:
-            // Navigate to Analytics
-              break;
-            case 4:
-            // Navigate to Profile
-              break;
-          }
-        },
-      ),
     );
   }
-}
-
-void main() {
-  runApp(const MaterialApp(
-    home: MapScreen(),
-    debugShowCheckedModeBanner: false,
-  ));
 }

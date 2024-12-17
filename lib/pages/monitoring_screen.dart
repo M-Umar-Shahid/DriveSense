@@ -127,7 +127,6 @@ class MonitoringPage extends StatelessWidget {
               ),
 
               // Bottom Navigation Bar
-              _bottomNavigationBar(),
             ],
           ),
         ),
@@ -205,36 +204,6 @@ class MonitoringPage extends StatelessWidget {
     );
   }
 
-  Widget _bottomNavigationBar() {
-    return BottomNavigationBar(
-      backgroundColor: Colors.white,
-      type: BottomNavigationBarType.fixed,
-      selectedItemColor: Colors.blueAccent,
-      unselectedItemColor: Colors.grey,
-      items: [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home),
-          label: 'Home',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.camera),
-          label: 'Camera',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.map),
-          label: 'Map',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.analytics),
-          label: 'Analytics',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.person),
-          label: 'Profile',
-        ),
-      ],
-    );
-  }
 }
 
 void main() => runApp(MaterialApp(

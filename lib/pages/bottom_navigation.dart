@@ -1,8 +1,8 @@
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
+import 'package:drivesense/pages/profile_page.dart';
+import 'package:drivesense/pages/video_alerts_page.dart';
 import 'package:flutter/material.dart';
 import 'dashboard.dart';
-import 'monitoring_screen.dart';
-import 'navigation_screen.dart';
 
 class BottomNavigation extends StatefulWidget {
   const BottomNavigation({super.key});
@@ -17,20 +17,8 @@ class _BottomNavigationState extends State<BottomNavigation> {
   // Pages to display based on selected index
   final List<Widget> _pages = [
     const Dashboard(),
-    const MonitoringPage(),
-    const MapScreen(),
-    const Center(
-      child: Text(
-        'Analytics Page',
-        style: TextStyle(fontSize: 24.0, fontWeight: FontWeight.bold),
-      ),
-    ),
-    const Center(
-      child: Text(
-        'Profile Page',
-        style: TextStyle(fontSize: 24.0, fontWeight: FontWeight.bold),
-      ),
-    ),
+    VideoAlertsPage(),
+    const ProfilePage(),
   ];
 
   @override
@@ -50,9 +38,7 @@ class _BottomNavigationState extends State<BottomNavigation> {
         animationDuration: const Duration(milliseconds: 300),
         items: const <Widget>[
           Icon(Icons.home, size: 30, color: Colors.white),
-          Icon(Icons.camera_alt, size: 30, color: Colors.white),
-          Icon(Icons.map, size: 30, color: Colors.white),
-          Icon(Icons.analytics, size: 30, color: Colors.white),
+          Icon(Icons.receipt, size: 30, color: Colors.white),
           Icon(Icons.person, size: 30, color: Colors.white),
         ],
         onTap: (index) {
