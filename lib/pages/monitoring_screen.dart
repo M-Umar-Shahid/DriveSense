@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';
 
 class MonitoringPage extends StatelessWidget {
   const MonitoringPage({super.key});
@@ -18,12 +19,12 @@ class MonitoringPage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
-                    icon: Icon(Icons.arrow_back, color: Colors.black),
+                    icon: const Icon(Icons.arrow_back, color: Colors.black),
                     onPressed: () {
                       Navigator.pop(context);
                     },
                   ),
-                  Text(
+                  const Text(
                     'Real time Monitoring',
                     style: TextStyle(
                       color: Colors.black,
@@ -32,16 +33,16 @@ class MonitoringPage extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: Icon(Icons.settings, color: Colors.black),
+                    icon: const Icon(Icons.settings, color: Colors.black),
                     onPressed: () {},
                   ),
                 ],
               ),
 
-              SizedBox(height: 20.0),
+              const SizedBox(height: 20.0),
 
               // Driver's View Section
-              Text(
+              const Text(
                 "Driver's View",
                 style: TextStyle(
                   color: Colors.black,
@@ -49,14 +50,14 @@ class MonitoringPage extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              SizedBox(height: 10.0),
+              const SizedBox(height: 10.0),
               Stack(
                 children: [
                   Container(
                     height: 200.0,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12.0),
-                      image: DecorationImage(
+                      image: const DecorationImage(
                         image: AssetImage('assets/images/driver-view.png'), // Replace with your image
                         fit: BoxFit.cover,
                       ),
@@ -66,12 +67,12 @@ class MonitoringPage extends StatelessWidget {
                     bottom: 10.0,
                     right: 10.0,
                     child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                       decoration: BoxDecoration(
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(8.0),
                       ),
-                      child: Text(
+                      child: const Text(
                         'Camera is Active',
                         style: TextStyle(
                           color: Colors.greenAccent,
@@ -83,10 +84,10 @@ class MonitoringPage extends StatelessWidget {
                 ],
               ),
 
-              SizedBox(height: 20.0),
+              const SizedBox(height: 20.0),
 
               // Driver's Status Section
-              Text(
+              const Text(
                 "Driver's Status",
                 style: TextStyle(
                   color: Colors.black,
@@ -94,7 +95,7 @@ class MonitoringPage extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              SizedBox(height: 10.0),
+              const SizedBox(height: 10.0),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -104,10 +105,10 @@ class MonitoringPage extends StatelessWidget {
                 ],
               ),
 
-              SizedBox(height: 20.0),
+              const SizedBox(height: 20.0),
 
               // Recent Alerts Section
-              Text(
+              const Text(
                 'Recent Alerts',
                 style: TextStyle(
                   color: Colors.black,
@@ -115,7 +116,7 @@ class MonitoringPage extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              SizedBox(height: 10.0),
+              const SizedBox(height: 10.0),
               Expanded(
                 child: ListView(
                   children: [

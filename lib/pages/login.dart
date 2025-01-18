@@ -20,16 +20,16 @@ class LoginPage extends StatelessWidget {
               children: [
                 // Back Button
                 IconButton(
-                  icon: Icon(Icons.arrow_back),
+                  icon: const Icon(Icons.arrow_back),
                   onPressed: () {
                     Navigator.pop(context);
                   },
                 ),
 
-                SizedBox(height: 20.0),
+                const SizedBox(height: 20.0),
 
                 // Welcome Back Text
-                Text(
+                const Text(
                   'Welcome back!',
                   style: TextStyle(
                     fontSize: 28.0,
@@ -37,10 +37,10 @@ class LoginPage extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 10.0),
+                const SizedBox(height: 10.0),
 
                 // Log in Text
-                Text(
+                const Text(
                   'Log in',
                   style: TextStyle(
                     fontSize: 20.0,
@@ -49,10 +49,10 @@ class LoginPage extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 8.0),
+                const SizedBox(height: 8.0),
 
                 // Subtitle
-                Text(
+                const Text(
                   'Enter the details below to log in to your account',
                   style: TextStyle(
                     fontSize: 16.0,
@@ -60,7 +60,7 @@ class LoginPage extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 30.0),
+                const SizedBox(height: 30.0),
 
                 // Email TextField
                 TextField(
@@ -73,7 +73,7 @@ class LoginPage extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 20.0),
+                const SizedBox(height: 20.0),
 
                 // Password TextField
                 TextField(
@@ -106,7 +106,7 @@ class LoginPage extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 30.0),
+                const SizedBox(height: 30.0),
 
                 // Login Button
                 ElevatedButton(
@@ -117,13 +117,13 @@ class LoginPage extends StatelessWidget {
                     );
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF1976D2),
-                    padding: EdgeInsets.symmetric(vertical: 16.0),
+                    backgroundColor: const Color(0xFF1976D2),
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10.0),
                     ),
                   ),
-                  child: Center(
+                  child: const Center(
                     child: Text(
                       'Login',
                       style: TextStyle(
@@ -135,10 +135,10 @@ class LoginPage extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 20.0),
+                const SizedBox(height: 20.0),
 
                 // Or Login With
-                Center(
+                const Center(
                   child: Text(
                     'Or Login With',
                     style: TextStyle(
@@ -148,7 +148,7 @@ class LoginPage extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 20.0),
+                const SizedBox(height: 20.0),
 
                 // Social Media Buttons
                 Row(
@@ -163,7 +163,7 @@ class LoginPage extends StatelessWidget {
                       ),
                       iconSize: 40.0,
                     ),
-                    SizedBox(width: 20.0),
+                    const SizedBox(width: 20.0),
                     IconButton(
                       onPressed: () {},
                       icon: SizedBox(
@@ -173,7 +173,7 @@ class LoginPage extends StatelessWidget {
                       ),
                       iconSize: 40.0,
                     ),
-                    SizedBox(width: 20.0),
+                    const SizedBox(width: 20.0),
                     IconButton(
                       onPressed: () {},
                       icon: SizedBox(
@@ -186,7 +186,7 @@ class LoginPage extends StatelessWidget {
                   ],
                 ),
 
-                SizedBox(height: 20.0),
+                const SizedBox(height: 20.0),
 
                 // Sign Up Prompt
                 Center(
