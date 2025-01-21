@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "119076464153",
+    "project_id": "drivesense-777b3",
+    "storage_bucket": "drivesense-777b3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:119076464153:android:e55b0a860ff0f9d7412c88",
+        "android_client_info": {
+          "package_name": "com.example.drivesense"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAqsVQO1VbS4lZMchXo2UXBWHFPfAT1wjo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

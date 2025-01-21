@@ -1,8 +1,52 @@
 import 'package:drivesense/pages/login.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-class SignUpPage extends StatelessWidget {
+class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
+
+  @override
+  State<SignUpPage> createState() => _SignUpPageState();
+}
+
+class _SignUpPageState extends State<SignUpPage> {
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  void _signUp() async {
+    final String email = _emailController.text.trim();
+    final String password = _passwordController.text.trim();
+    final String confirmPassword = _confirmPasswordController.text.trim();
+
+    if (password != confirmPassword) {
+      _showMessage('Passwords do not match');
+      return;
+    }
+
+    try {
+      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      _showMessage('Sign Up Successful! Welcome, ${userCredential.user?.email}');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+      );
+    } catch (e) {
+      _showMessage('Error: $e');
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,27 +60,23 @@ class SignUpPage extends StatelessWidget {
               children: [
                 // Back Button
                 IconButton(
-                  icon: Icon(Icons.arrow_back),
+                  icon: const Icon(Icons.arrow_back),
                   onPressed: () {
                     Navigator.pop(context);
                   },
                 ),
-
-                SizedBox(height: 20.0),
-
+                const SizedBox(height: 20.0),
                 // Title
-                Text(
+                const Text(
                   'Create your account',
                   style: TextStyle(
                     fontSize: 28.0,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-
-                SizedBox(height: 10.0),
-
+                const SizedBox(height: 10.0),
                 // Subtitle
-                Text(
+                const Text(
                   'Sign Up',
                   style: TextStyle(
                     fontSize: 20.0,
@@ -44,22 +84,19 @@ class SignUpPage extends StatelessWidget {
                     color: Color(0xFF1976D2),
                   ),
                 ),
-
-                SizedBox(height: 8.0),
-
+                const SizedBox(height: 8.0),
                 // Description
-                Text(
+                const Text(
                   'Enter the details below to create your account',
                   style: TextStyle(
                     fontSize: 16.0,
                     color: Colors.grey,
                   ),
                 ),
-
-                SizedBox(height: 30.0),
-
+                const SizedBox(height: 30.0),
                 // Name TextField
                 TextField(
+                  controller: _nameController,
                   decoration: InputDecoration(
                     labelText: 'Name',
                     border: OutlineInputBorder(
@@ -68,11 +105,10 @@ class SignUpPage extends StatelessWidget {
                     hintText: 'Enter your name',
                   ),
                 ),
-
-                SizedBox(height: 20.0),
-
+                const SizedBox(height: 20.0),
                 // Email TextField
                 TextField(
+                  controller: _emailController,
                   decoration: InputDecoration(
                     labelText: 'Email',
                     border: OutlineInputBorder(
@@ -81,11 +117,10 @@ class SignUpPage extends StatelessWidget {
                     hintText: 'Enter your email',
                   ),
                 ),
-
-                SizedBox(height: 20.0),
-
+                const SizedBox(height: 20.0),
                 // Password TextField
                 TextField(
+                  controller: _passwordController,
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: 'Password',
@@ -95,11 +130,10 @@ class SignUpPage extends StatelessWidget {
                     hintText: 'Enter 8 digit password',
                   ),
                 ),
-
-                SizedBox(height: 20.0),
-
+                const SizedBox(height: 20.0),
                 // Confirm Password TextField
                 TextField(
+                  controller: _confirmPasswordController,
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: 'Confirm Password',
@@ -109,20 +143,18 @@ class SignUpPage extends StatelessWidget {
                     hintText: 'Confirm your password',
                   ),
                 ),
-
-                SizedBox(height: 30.0),
-
+                const SizedBox(height: 30.0),
                 // Sign Up Button
                 ElevatedButton(
-                  onPressed: () {},
+                  onPressed: _signUp,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF1976D2),
-                    padding: EdgeInsets.symmetric(vertical: 16.0),
+                    backgroundColor: const Color(0xFF1976D2),
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10.0),
                     ),
                   ),
-                  child: Center(
+                  child: const Center(
                     child: Text(
                       'Sign Up',
                       style: TextStyle(
@@ -133,33 +165,7 @@ class SignUpPage extends StatelessWidget {
                     ),
                   ),
                 ),
-
-                SizedBox(height: 10.0),
-
-                // Sign Up With Google Button
-                OutlinedButton(
-                  onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Color(0xFF1976D2)),
-                    padding: EdgeInsets.symmetric(vertical: 16.0),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'Sign Up With Google',
-                      style: TextStyle(
-                        color: Color(0xFF1976D2),
-                        fontSize: 16.0,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 20.0),
-
+                const SizedBox(height: 10.0),
                 // Login Prompt
                 Center(
                   child: Row(
