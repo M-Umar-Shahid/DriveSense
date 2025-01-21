@@ -2,11 +2,47 @@ import 'package:drivesense/pages/bottom_navigation.dart';
 import 'package:drivesense/pages/forgot_password.dart';
 import 'package:drivesense/pages/signup.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-import 'dashboard.dart';
-
-class LoginPage extends StatelessWidget {
+class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  void _login() async {
+    final String email = _emailController.text.trim();
+    final String password = _passwordController.text.trim();
+
+    try {
+      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      // If successful, navigate to the bottom navigation page
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const BottomNavigation()),
+      );
+    } catch (e) {
+      // Handle errors such as wrong credentials
+      _showMessage('Login failed: ${e.toString()}');
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,12 +100,13 @@ class LoginPage extends StatelessWidget {
 
                 // Email TextField
                 TextField(
+                  controller: _emailController,
                   decoration: InputDecoration(
-                    labelText: 'Name or Email',
+                    labelText: 'Email',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10.0),
                     ),
-                    hintText: 'Enter User name or Email',
+                    hintText: 'Enter your email',
                   ),
                 ),
 
@@ -77,13 +114,14 @@ class LoginPage extends StatelessWidget {
 
                 // Password TextField
                 TextField(
+                  controller: _passwordController,
                   obscureText: true,
                   decoration: InputDecoration(
                     labelText: 'Password',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10.0),
                     ),
-                    hintText: 'Enter password',
+                    hintText: 'Enter your password',
                   ),
                 ),
 
@@ -110,12 +148,7 @@ class LoginPage extends StatelessWidget {
 
                 // Login Button
                 ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const BottomNavigation()),
-                    );
-                  },
+                  onPressed: _login,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF1976D2),
                     padding: const EdgeInsets.symmetric(vertical: 16.0),
