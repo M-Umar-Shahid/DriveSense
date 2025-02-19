@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:camera/camera.dart';
+import 'package:http/http.dart' as http;
 import 'dart:math' as math;
+import 'dart:convert';
 
 class MonitoringPage extends StatefulWidget {
   const MonitoringPage({super.key});
@@ -14,6 +17,14 @@ class _MonitoringPageState extends State<MonitoringPage> {
   List<CameraDescription>? _cameras;
   bool _isCameraInitialized = false;
   bool _isAnalyzing = false;
+  List<Map<String, dynamic>> _detections = [];
+  Timer? _timer; // Timer for periodic requests
+
+  @override
+  void initState() {
+    super.initState();
+    initializeCamera();
+  }
 
   Future<void> initializeCamera() async {
     _cameras = await availableCameras();
@@ -23,29 +34,64 @@ class _MonitoringPageState extends State<MonitoringPage> {
 
     _cameraController = CameraController(
       frontCamera,
-      ResolutionPreset.high,
+      ResolutionPreset.medium,
+      enableAudio: false,
     );
 
     await _cameraController!.initialize();
+    if (!mounted) return;
+
     setState(() {
       _isCameraInitialized = true;
     });
   }
 
-  void toggleAnalyzing() async {
+  void toggleAnalyzing() {
     if (_isAnalyzing) {
-      // Stop analyzing: Dispose of the camera
-      await _cameraController?.dispose();
-      setState(() {
-        _isCameraInitialized = false;
-        _isAnalyzing = false;
-        _cameraController = null;
-      });
+      _stopAnalyzing();
     } else {
-      // Start analyzing: Initialize the camera
-      await initializeCamera();
+      _startAnalyzing();
+    }
+  }
+
+  void _startAnalyzing() {
+    if (!_isCameraInitialized || _cameraController == null) return;
+
+    setState(() {
+      _isAnalyzing = true;
+    });
+
+    _timer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (_isAnalyzing) {
+        XFile imageFile = await _cameraController!.takePicture();
+        await _processCapturedImage(imageFile);
+      }
+    });
+  }
+
+  void _stopAnalyzing() {
+    _timer?.cancel();
+    setState(() {
+      _isAnalyzing = false;
+      _detections.clear();
+    });
+  }
+
+  Future<void> _processCapturedImage(XFile imageFile) async {
+    final bytes = await imageFile.readAsBytes();
+
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('http://192.168.100.129:8000/detect'),
+    );
+    request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: 'frame.jpg'));
+
+    var response = await request.send();
+    if (response.statusCode == 200) {
+      var result = await response.stream.bytesToString();
+      var jsonResult = jsonDecode(result);
       setState(() {
-        _isAnalyzing = true;
+        _detections = List<Map<String, dynamic>>.from(jsonResult['detections']);
       });
     }
   }
@@ -53,6 +99,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
   @override
   void dispose() {
     _cameraController?.dispose();
+    _timer?.cancel();
     super.dispose();
   }
 
@@ -124,13 +171,13 @@ class _MonitoringPageState extends State<MonitoringPage> {
                             child: CameraPreview(_cameraController!),
                           ),
                         )
-                            : Center(
+                            : const Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(Icons.camera_alt, color: Colors.grey, size: 100),
-                              const SizedBox(height: 10),
-                              const Text(
+                              SizedBox(height: 10),
+                              Text(
                                 'Camera not active',
                                 style: TextStyle(color: Colors.white),
                               ),
@@ -138,26 +185,22 @@ class _MonitoringPageState extends State<MonitoringPage> {
                           ),
                         ),
                       ),
-                      if (_isAnalyzing)
-                        Positioned(
-                          bottom: 10.0,
-                          right: 10.0,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8.0, vertical: 4.0),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                            child: const Text(
-                              'Camera is Active',
-                              style: TextStyle(
-                                color: Colors.greenAccent,
-                                fontSize: 12.0,
-                              ),
-                            ),
-                          ),
-                        ),
+                      // if (_detections.isNotEmpty)
+                      //   ..._detections.map((detection) {
+                      //     return Positioned(
+                      //       left: detection['x1'].toDouble(),
+                      //       top: detection['y1'].toDouble(),
+                      //       width: (detection['x2'] - detection['x1']).toDouble(),
+                      //       height: (detection['y2'] - detection['y1']).toDouble(),
+                      //       child: Container(
+                      //         decoration: BoxDecoration(border: Border.all(color: Colors.red, width: 2)),
+                      //         child: Text(
+                      //           'Class: ${detection['class_id']}, Confidence: ${detection['confidence'].toStringAsFixed(2)}',
+                      //           style: const TextStyle(color: Colors.red, backgroundColor: Colors.white),
+                      //         ),
+                      //       ),
+                      //     );
+                      //   }),
                     ],
                   ),
                 ),
