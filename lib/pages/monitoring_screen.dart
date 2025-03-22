@@ -20,10 +20,10 @@ class _MonitoringPageState extends State<MonitoringPage> {
   List<CameraDescription>? _cameras;
   bool _isCameraInitialized = false;
   bool _isAnalyzing = false;
-  List<Map<String, dynamic>> _detections = [];
-  Timer? _timer; // Timer for periodic requests
-  int _consecutiveDrowsyCount = 0; // Track consecutive drowsy detections
-  bool _isDrowsy = false; // Track drowsy state
+  Map<String, dynamic>? _detectionData;
+  Timer? _timer;
+  int _consecutiveDrowsyCount = 0;
+  bool _isDrowsy = false;
 
   @override
   void initState() {
@@ -34,7 +34,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
   Future<void> initializeCamera() async {
     _cameras = await availableCameras();
     final frontCamera = _cameras!.firstWhere(
-      (camera) => camera.lensDirection == CameraLensDirection.front,
+          (camera) => camera.lensDirection == CameraLensDirection.front,
     );
 
     _logger.info('Camera: ${frontCamera.name}');
@@ -99,7 +99,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
       _isAnalyzing = true;
     });
 
-    _timer = Timer.periodic(const Duration(milliseconds: 1000), (timer) async {
+    _timer = Timer.periodic(const Duration(milliseconds: 200), (timer) async {
       if (_isAnalyzing) {
         XFile imageFile = await _cameraController!.takePicture();
         await _processCapturedImage(imageFile);
@@ -111,7 +111,9 @@ class _MonitoringPageState extends State<MonitoringPage> {
     _timer?.cancel();
     setState(() {
       _isAnalyzing = false;
-      _detections.clear();
+      _detectionData = null;
+      _consecutiveDrowsyCount = 0;
+      _isDrowsy = false;
     });
   }
 
@@ -129,15 +131,14 @@ class _MonitoringPageState extends State<MonitoringPage> {
         var result = await response.stream.bytesToString();
         var jsonResult = jsonDecode(result);
         setState(() {
-          _detections =
-              List<Map<String, dynamic>>.from(jsonResult['detections']);
-          if (_detections.isNotEmpty && _detections.any((d) => d['class_id'] == 0)) {
+          _detectionData = jsonResult;
+          if (_detectionData!['is_drowsy'] || _detectionData!['is_yawning']) {
             _consecutiveDrowsyCount++;
             if (_consecutiveDrowsyCount >= 5) {
               _isDrowsy = true;
             }
           } else {
-            _consecutiveDrowsyCount = 0; // Reset if no drowsy detection
+            _consecutiveDrowsyCount = 0;
             _isDrowsy = false;
           }
         });
@@ -221,71 +222,80 @@ class _MonitoringPageState extends State<MonitoringPage> {
                           color: Colors.black,
                         ),
                         child: _isAnalyzing &&
-                                _isCameraInitialized &&
-                                _cameraController != null
+                            _isCameraInitialized &&
+                            _cameraController != null
                             ? ClipRRect(
-                                borderRadius: BorderRadius.circular(12.0),
-                                child: Transform(
-                                  alignment: Alignment.center,
-                                  transform: Matrix4.identity()
-                                    ..rotateY(math.pi),
-                                  child: CameraPreview(_cameraController!),
-                                ),
-                              )
+                          borderRadius: BorderRadius.circular(12.0),
+                          child: Transform(
+                            alignment: Alignment.center,
+                            transform: Matrix4.identity()
+                              ..rotateY(math.pi),
+                            child: CameraPreview(_cameraController!),
+                          ),
+                        )
                             : const Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.camera_alt,
-                                        color: Colors.grey, size: 100),
-                                    SizedBox(height: 10),
-                                    Text(
-                                      'Camera not active',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                                  ],
-                                ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.camera_alt,
+                                  color: Colors.grey, size: 100),
+                              SizedBox(height: 10),
+                              Text(
+                                'Camera not active',
+                                style: TextStyle(color: Colors.white),
                               ),
+                            ],
+                          ),
+                        ),
                       ),
-                      if (_detections.isNotEmpty)
-                        ..._detections.map((detection) {
-                          const xScale =
-                              300.0 / 480; // Container width / backend width
-                          const yScale =
-                              500.0 / 720; // Container height / backend height
-
-                          final mirroredX1 = 300 -
-                              (detection['x2'].toDouble() *
-                                  xScale); // Flip horizontally
-                          final mirroredWidth =
-                              (detection['x2'] - detection['x1']).toDouble() *
-                                  xScale;
-
-                          return Positioned(
-                            left: mirroredX1
-                                .toDouble(), // Convert to double explicitly
-                            top: detection['y1'].toDouble() * yScale,
-                            width: mirroredWidth,
-                            height:
-                                (detection['y2'] - detection['y1']).toDouble() *
-                                    yScale,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.red, width: 2),
-                              ),
-                              child: Text(
-                                'Class: ${detection['class_id']}, Confidence: ${detection['confidence'].toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  color: Colors.red,
-                                  backgroundColor: Colors.white,
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                      if (_isDrowsy)
+                      if (_detectionData != null)
+                        CustomPaint(
+                          painter: FaceOverlayPainter(
+                            faceCircle: _detectionData!['face_circle'],
+                            leftEyeCircle: _detectionData!['left_eye_circle'],
+                            rightEyeCircle: _detectionData!['right_eye_circle'],
+                            axes: _detectionData!['axes'],
+                            containerWidth: 300.0,
+                            containerHeight: 500.0,
+                            imageWidth: _cameraController!.value.previewSize!.height,
+                            imageHeight: _cameraController!.value.previewSize!.width,
+                          ),
+                          child: Container(
+                            height: 500.0,
+                            width: 300.0,
+                          ),
+                        ),
+                      if (_detectionData != null)
                         Positioned(
                           top: 10,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.all(8.0),
+                            color: Colors.black.withOpacity(0.6),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Eye Openness: ${_detectionData!['eye_openness'].toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.0,
+                                  ),
+                                ),
+                                Text(
+                                  'Mouth Openness: ${_detectionData!['mouth_openness'].toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.0,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (_isDrowsy)
+                        Positioned(
+                          top: 50,
                           left: 10,
                           child: Container(
                             padding: const EdgeInsets.all(8.0),
@@ -346,7 +356,10 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
-                    _alertTile('Distract detected', '5 minutes ago'),
+                    if (_detectionData != null && _detectionData!['is_drowsy'])
+                      _alertTile('Drowsy detected', 'Just now'),
+                    if (_detectionData != null && _detectionData!['is_yawning'])
+                      _alertTile('Yawning detected', 'Just now'),
                     _alertTile('Seatbelt not fastened', '5 minutes ago'),
                     _alertTile('Phone usage detected', '10 minutes ago'),
                   ],
@@ -363,10 +376,11 @@ class _MonitoringPageState extends State<MonitoringPage> {
     bool isActive = false;
     if (label == 'Drowsy' && _isDrowsy) {
       isActive = true;
-    } else if (label == 'Awake' && !_isDrowsy && _detections.isNotEmpty && !_detections.any((d) => d['class_id'] == 0)) {
+    } else if (label == 'Awake' && !_isDrowsy && _detectionData != null) {
       isActive = true;
-    } else if (label == 'Seat belt' && _detections.isNotEmpty && _detections.any((d) => d['class_id'] == 2)) { // Adjust class_id for seat belt
-      isActive = true;
+    } else if (label == 'Seat belt') {
+      // Placeholder for seatbelt detection (not implemented in this example)
+      isActive = false;
     }
 
     return Column(
@@ -439,6 +453,106 @@ class _MonitoringPageState extends State<MonitoringPage> {
   }
 }
 
+// Custom painter to draw face circle, eye circles, and axes
+class FaceOverlayPainter extends CustomPainter {
+  final Map<String, dynamic> faceCircle;
+  final Map<String, dynamic> leftEyeCircle;
+  final Map<String, dynamic> rightEyeCircle;
+  final Map<String, dynamic> axes;
+  final double containerWidth;
+  final double containerHeight;
+  final double imageWidth;
+  final double imageHeight;
+
+  FaceOverlayPainter({
+    required this.faceCircle,
+    required this.leftEyeCircle,
+    required this.rightEyeCircle,
+    required this.axes,
+    required this.containerWidth,
+    required this.containerHeight,
+    required this.imageWidth,
+    required this.imageHeight,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final xScale = containerWidth / imageWidth;
+    final yScale = containerHeight / imageHeight;
+
+    // Draw face circle
+    final faceCenter = Offset(
+      containerWidth - (faceCircle['center'][0] * xScale), // Mirror horizontally
+      faceCircle['center'][1] * yScale,
+    );
+    final faceRadius = faceCircle['radius'] * xScale;
+    final facePaint = Paint()
+      ..color = Colors.green
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    canvas.drawCircle(faceCenter, faceRadius, facePaint);
+
+    // Draw left eye circle
+    final leftEyeCenter = Offset(
+      containerWidth - (leftEyeCircle['center'][0] * xScale), // Mirror
+      leftEyeCircle['center'][1] * yScale,
+    );
+    final leftEyeRadius = leftEyeCircle['radius'] * xScale;
+    final eyePaint = Paint()
+      ..color = Colors.yellow
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    canvas.drawCircle(leftEyeCenter, leftEyeRadius, eyePaint);
+
+    // Draw right eye circle
+    final rightEyeCenter = Offset(
+      containerWidth - (rightEyeCircle['center'][0] * xScale), // Mirror
+      rightEyeCircle['center'][1] * yScale,
+    );
+    final rightEyeRadius = rightEyeCircle['radius'] * xScale;
+    canvas.drawCircle(rightEyeCenter, rightEyeRadius, eyePaint);
+
+    // Draw axes
+    final noseTip = Offset(
+      containerWidth - (axes['x_axis'][0][0] * xScale), // Mirror
+      axes['x_axis'][0][1] * yScale,
+    );
+
+    // X-axis (red)
+    final xEnd = Offset(
+      containerWidth - (axes['x_axis'][1][0] * xScale), // Mirror
+      axes['x_axis'][1][1] * yScale,
+    );
+    final xPaint = Paint()
+      ..color = Colors.red
+      ..strokeWidth = 2.0;
+    canvas.drawLine(noseTip, xEnd, xPaint);
+
+    // Y-axis (green)
+    final yEnd = Offset(
+      containerWidth - (axes['y_axis'][1][0] * xScale), // Mirror
+      axes['y_axis'][1][1] * yScale,
+    );
+    final yPaint = Paint()
+      ..color = Colors.green
+      ..strokeWidth = 2.0;
+    canvas.drawLine(noseTip, yEnd, yPaint);
+
+    // Z-axis (blue)
+    final zEnd = Offset(
+      containerWidth - (axes['z_axis'][1][0] * xScale), // Mirror
+      axes['z_axis'][1][1] * yScale,
+    );
+    final zPaint = Paint()
+      ..color = Colors.blue
+      ..strokeWidth = 2.0;
+    canvas.drawLine(noseTip, zEnd, zPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
 void main() => runApp(const MaterialApp(
-      home: MonitoringPage(),
-    ));
+  home: MonitoringPage(),
+));
