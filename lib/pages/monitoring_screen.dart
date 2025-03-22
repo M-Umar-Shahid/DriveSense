@@ -97,6 +97,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
 
     setState(() {
       _isAnalyzing = true;
+
     });
 
     _timer = Timer.periodic(const Duration(milliseconds: 200), (timer) async {
@@ -248,7 +249,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
                           ),
                         ),
                       ),
-                      if (_detectionData != null)
+                      if (_isAnalyzing && _detectionData != null)
                         CustomPaint(
                           painter: FaceOverlayPainter(
                             faceCircle: _detectionData!['face_circle'],
@@ -260,12 +261,12 @@ class _MonitoringPageState extends State<MonitoringPage> {
                             imageWidth: _cameraController!.value.previewSize!.height,
                             imageHeight: _cameraController!.value.previewSize!.width,
                           ),
-                          child: Container(
+                          child: const SizedBox(
                             height: 500.0,
                             width: 300.0,
                           ),
                         ),
-                      if (_detectionData != null)
+                      if (_isAnalyzing && _detectionData != null)
                         Positioned(
                           top: 10,
                           left: 10,
