@@ -24,6 +24,8 @@ class _MonitoringPageState extends State<MonitoringPage> {
   Timer? _timer;
   int _consecutiveDrowsyCount = 0;
   bool _isDrowsy = false;
+  int _consecutiveDistractedCount = 0; // Track consecutive distracted frames
+  bool _isDistracted = false; // Track distracted state
 
   @override
   void initState() {
@@ -115,6 +117,8 @@ class _MonitoringPageState extends State<MonitoringPage> {
       _detectionData = null;
       _consecutiveDrowsyCount = 0;
       _isDrowsy = false;
+      _consecutiveDistractedCount = 0; // Reset distracted counter
+      _isDistracted = false; // Reset distracted state
     });
   }
 
@@ -141,6 +145,16 @@ class _MonitoringPageState extends State<MonitoringPage> {
           } else {
             _consecutiveDrowsyCount = 0;
             _isDrowsy = false;
+          }
+          // Distraction detection
+          if (_detectionData!['is_distracted']) {
+            _consecutiveDistractedCount++;
+            if (_consecutiveDistractedCount >= 5) {
+              _isDistracted = true;
+            }
+          } else {
+            _consecutiveDistractedCount = 0;
+            _isDistracted = false;
           }
         });
       } else {
@@ -303,6 +317,22 @@ class _MonitoringPageState extends State<MonitoringPage> {
                             color: Colors.red.withOpacity(0.8),
                             child: const Text(
                               'WARNING: Driver Drowsy!',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (_isDistracted)
+                        Positioned(
+                          top: 90,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.all(8.0),
+                            color: Colors.orange.withOpacity(0.8),
+                            child: const Text(
+                              'WARNING: Driver Distracted!',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
