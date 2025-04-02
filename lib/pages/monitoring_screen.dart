@@ -137,7 +137,11 @@ class _MonitoringPageState extends State<MonitoringPage> {
         var jsonResult = jsonDecode(result);
         setState(() {
           _detectionData = jsonResult;
-          if (_detectionData!['is_drowsy'] || _detectionData!['is_yawning']) {
+          bool isDrowsy = _detectionData?['is_drowsy'] ?? false;
+          bool isYawning = _detectionData?['is_yawning'] ?? false;
+          bool isDistracted = _detectionData?['is_distracted'] ?? false;
+
+          if (isDrowsy || isYawning) {
             _consecutiveDrowsyCount++;
             if (_consecutiveDrowsyCount >= 5) {
               _isDrowsy = true;
@@ -146,8 +150,8 @@ class _MonitoringPageState extends State<MonitoringPage> {
             _consecutiveDrowsyCount = 0;
             _isDrowsy = false;
           }
-          // Distraction detection
-          if (_detectionData!['is_distracted']) {
+
+          if (isDistracted) {
             _consecutiveDistractedCount++;
             if (_consecutiveDistractedCount >= 5) {
               _isDistracted = true;
@@ -230,8 +234,8 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   child: Stack(
                     children: [
                       Container(
-                        height: 500.0,
-                        width: 300.0,
+                        height: 475.0,
+                        width: 350.0,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12.0),
                           color: Colors.black,
