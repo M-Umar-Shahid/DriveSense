@@ -234,8 +234,8 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   child: Stack(
                     children: [
                       Container(
-                        height: 475.0,
-                        width: 350.0,
+                        height: 500.0,
+                        width: 300.0,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12.0),
                           color: Colors.black,
