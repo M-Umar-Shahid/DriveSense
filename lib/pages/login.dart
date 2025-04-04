@@ -1,4 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drivesense/pages/bottom_navigation.dart';
+import 'package:drivesense/pages/face_verification.dart'; // We'll create this page
 import 'package:drivesense/pages/forgot_password.dart';
 import 'package:drivesense/pages/signup.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +16,6 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   void _login() async {
@@ -22,20 +23,56 @@ class _LoginPageState extends State<LoginPage> {
     final String password = _passwordController.text.trim();
 
     try {
+      // 1. Sign in with email & password
       UserCredential userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // If successful, navigate to the bottom navigation page
-      Navigator.pushReplacement(
+      // 2. Fetch the stored embedding from Firestore
+      final userId = userCredential.user!.uid;
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+
+      final data = doc.data();
+      if (data == null || !data.containsKey('face_embedding')) {
+        // If there's no embedding, either proceed without face auth or show an error.
+        _showMessage('No face embedding found. Proceeding without face authentication.');
+        _goToMainPage();
+        return;
+      }
+
+      final storedEmbedding = data['face_embedding']; // e.g. List<dynamic>
+
+      // 3. Navigate to FaceVerificationPage to verify face
+      final verificationResult = await Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const BottomNavigation()),
+        MaterialPageRoute(
+          builder: (context) => FaceVerificationPage(
+            storedEmbedding: storedEmbedding,
+          ),
+        ),
       );
+
+      // 4. If face verification succeeded, proceed to main app. Otherwise, sign out or show error.
+      if (verificationResult == true) {
+        _goToMainPage();
+      } else {
+        _showMessage('Face verification failed. Please try again.');
+        await _auth.signOut();
+      }
     } catch (e) {
-      // Handle errors such as wrong credentials
-      _showMessage('Login failed: ${e.toString()}');
+      _showMessage('Login failed: $e');
     }
+  }
+
+  void _goToMainPage() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const BottomNavigation()),
+    );
   }
 
   void _showMessage(String message) {

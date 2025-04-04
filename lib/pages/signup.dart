@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:drivesense/pages/face_enrollment.dart';
 import 'package:drivesense/pages/login.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -27,11 +29,40 @@ class _SignUpPageState extends State<SignUpPage> {
       return;
     }
 
+    // Navigate to the Face Enrollment screen.
+    // The enrollment page should return a JSON map with the face embedding.
+    final enrollmentData = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const FaceEnrollmentPage()),
+    );
+
+    if (enrollmentData == null || !enrollmentData.containsKey('embedding')) {
+      _showMessage('Face enrollment failed. Please try again.');
+      return;
+    }
+
     try {
+      // Create Firebase account.
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
+
+      // Store user info along with the face embedding in Cloud Firestore.
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set({
+        'name': _nameController.text.trim(),
+        'email': email,
+        'face_embedding': enrollmentData['embedding'],
+        'createdAt': FieldValue.serverTimestamp(),
+      }).then((_) {
+        print("User document successfully written!");
+      }).catchError((error) {
+        print("Error writing user document: $error");
+      });
+
       _showMessage('Sign Up Successful! Welcome, ${userCredential.user?.email}');
       Navigator.pushReplacement(
         context,
