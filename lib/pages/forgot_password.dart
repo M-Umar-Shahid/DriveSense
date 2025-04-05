@@ -33,10 +33,10 @@ class ForgotPasswordPage extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 10.0),
+                const SizedBox(height: 10.0),
 
                 // Subtitle
-                Text(
+                const Text(
                   'Sign Up',
                   style: TextStyle(
                     fontSize: 20.0,
@@ -45,10 +45,10 @@ class ForgotPasswordPage extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 8.0),
+                const SizedBox(height: 8.0),
 
                 // Description
-                Text(
+                const Text(
                   "Don't worry it happens. Please enter the address associated with your account",
                   style: TextStyle(
                     fontSize: 16.0,
@@ -56,7 +56,7 @@ class ForgotPasswordPage extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 20.0),
+                const SizedBox(height: 20.0),
 
                 // Email TextField
                 TextField(

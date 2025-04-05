@@ -13,6 +13,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_mediapipe:
+    path: ./flutter_mediapipe-master
 
   # iOS style icons
   cupertino_icons: ^1.0.8

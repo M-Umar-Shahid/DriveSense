@@ -1,164 +1,95 @@
-import 'package:flutter/material.dart';
-import 'dart:async';
-import 'package:camera/camera.dart';
-import 'package:http/http.dart' as http;
 import 'dart:math' as math;
-import 'dart:convert';
-import 'package:logging/logging.dart';
-import '../utils/logger_util.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_mediapipe/flutter_mediapipe.dart';
+import 'package:flutter_mediapipe/gen/landmark.pb.dart';
 
 class MonitoringPage extends StatefulWidget {
-  const MonitoringPage({super.key});
+  const MonitoringPage({Key? key}) : super(key: key);
 
   @override
   State<MonitoringPage> createState() => _MonitoringPageState();
 }
 
 class _MonitoringPageState extends State<MonitoringPage> {
-  final Logger _logger = LoggerUtil.getLogger('MonitoringPage');
-  CameraController? _cameraController;
-  List<CameraDescription>? _cameras;
-  bool _isCameraInitialized = false;
   bool _isAnalyzing = false;
-  List<Map<String, dynamic>> _detections = [];
-  Timer? _timer; // Timer for periodic requests
-  int _consecutiveDrowsyCount = 0; // Track consecutive drowsy detections
-  bool _isDrowsy = false; // Track drowsy state
+  bool _isDrowsy = false;
+  double _averageEyeOpenness = 1.0;
+  final List<String> _recentAlerts = [];
 
-  @override
-  void initState() {
-    super.initState();
-    initializeCamera();
-  }
+  // Instead of a Timer, use a timestamp to track when eyes closed.
+  DateTime? _eyesClosedSince;
 
-  Future<void> initializeCamera() async {
-    _cameras = await availableCameras();
-    final frontCamera = _cameras!.firstWhere(
-      (camera) => camera.lensDirection == CameraLensDirection.front,
-    );
+  // Landmark indices used to compute eye openness.
+  final List<int> leftEyeIndices = [159, 145, 33, 133];
+  final List<int> rightEyeIndices = [386, 374, 362, 263];
 
-    _logger.info('Camera: ${frontCamera.name}');
-
-    // Test different resolution presets
-    for (var preset in [
-      ResolutionPreset.low,
-      ResolutionPreset.medium,
-      ResolutionPreset.high,
-      ResolutionPreset.veryHigh,
-      ResolutionPreset.ultraHigh,
-      ResolutionPreset.max,
-    ]) {
-      _cameraController = CameraController(
-        frontCamera,
-        preset,
-        enableAudio: false,
-      );
-
-      try {
-        await _cameraController!.initialize();
-        final previewSize = _cameraController!.value.previewSize;
-        _logger.info(
-            'Preset $preset: ${previewSize?.width}x${previewSize?.height}');
-        await _cameraController!.dispose();
-      } catch (e) {
-        _logger.warning('Preset $preset not supported: $e');
-      }
-    }
-
-    // Reinitialize with the desired preset
-    _cameraController = CameraController(
-      frontCamera,
-      ResolutionPreset.medium,
-      enableAudio: false,
-    );
-
-    await _cameraController!.initialize();
-    if (!mounted) return;
-
-    final previewSize = _cameraController!.value.previewSize;
-    _logger.info(
-        'Final Preview Size: ${previewSize?.width}x${previewSize?.height}');
+  void _onLandmarkStream(NormalizedLandmarkList landmarkList) {
+    double leftOpenness = _calculateEyeOpenness(landmarkList, leftEyeIndices);
+    double rightOpenness = _calculateEyeOpenness(landmarkList, rightEyeIndices);
+    double average = (leftOpenness + rightOpenness) / 2.0;
 
     setState(() {
-      _isCameraInitialized = true;
+      _averageEyeOpenness = average;
     });
+
+    // Use a threshold (e.g., 0.1) to determine if eyes are closed.
+    const double threshold = 0.12;
+    if (average < threshold) {
+      // If eyes just closed, record the time.
+      if (_eyesClosedSince == null) {
+        _eyesClosedSince = DateTime.now();
+      } else {
+        // If eyes remain closed for more than 1 second, trigger the alert.
+        if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(seconds: 1)) {
+          if (!_isDrowsy) { // Only update if not already flagged.
+            setState(() {
+              _isDrowsy = true;
+              _addRecentAlert("Drowsy detected");
+            });
+          }
+        }
+      }
+    } else {
+      // Reset the timer if eyes open.
+      _eyesClosedSince = null;
+      if (_isDrowsy) {
+        setState(() {
+          _isDrowsy = false;
+        });
+      }
+    }
+  }
+
+  double _calculateEyeOpenness(
+      NormalizedLandmarkList landmarks, List<int> indices) {
+    if (landmarks.landmark.length <= indices.reduce(math.max)) return 1.0;
+    NormalizedLandmark upper = landmarks.landmark[indices[0]];
+    NormalizedLandmark lower = landmarks.landmark[indices[1]];
+    NormalizedLandmark left = landmarks.landmark[indices[2]];
+    NormalizedLandmark right = landmarks.landmark[indices[3]];
+
+    double vertical = (upper.y - lower.y).abs();
+    double horizontal = (left.x - right.x).abs();
+    return horizontal == 0 ? 1.0 : vertical / horizontal;
+  }
+
+  void _addRecentAlert(String alert) {
+    if (!_recentAlerts.contains(alert)) {
+      _recentAlerts.add(alert);
+      if (_recentAlerts.length > 5) {
+        _recentAlerts.removeAt(0);
+      }
+    }
   }
 
   void toggleAnalyzing() {
-    if (_isAnalyzing) {
-      _stopAnalyzing();
-    } else {
-      _startAnalyzing();
-    }
-  }
-
-  void _startAnalyzing() {
-    if (!_isCameraInitialized || _cameraController == null) return;
-
     setState(() {
-      _isAnalyzing = true;
-    });
-
-    _timer = Timer.periodic(const Duration(milliseconds: 1000), (timer) async {
-      if (_isAnalyzing) {
-        XFile imageFile = await _cameraController!.takePicture();
-        await _processCapturedImage(imageFile);
+      _isAnalyzing = !_isAnalyzing;
+      if (!_isAnalyzing) {
+        _eyesClosedSince = null;
+        _isDrowsy = false;
       }
     });
-  }
-
-  void _stopAnalyzing() {
-    _timer?.cancel();
-    setState(() {
-      _isAnalyzing = false;
-      _detections.clear();
-    });
-  }
-
-  Future<void> _processCapturedImage(XFile imageFile) async {
-    try {
-      final bytes = await imageFile.readAsBytes();
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('http://192.168.100.59:8000/detect'),
-      );
-      request.files.add(
-          http.MultipartFile.fromBytes('file', bytes, filename: 'frame.jpg'));
-      var response = await request.send();
-      if (response.statusCode == 200) {
-        var result = await response.stream.bytesToString();
-        var jsonResult = jsonDecode(result);
-        setState(() {
-          _detections =
-              List<Map<String, dynamic>>.from(jsonResult['detections']);
-          if (_detections.isNotEmpty && _detections.any((d) => d['class_id'] == 0)) {
-            _consecutiveDrowsyCount++;
-            if (_consecutiveDrowsyCount >= 5) {
-              _isDrowsy = true;
-            }
-          } else {
-            _consecutiveDrowsyCount = 0; // Reset if no drowsy detection
-            _isDrowsy = false;
-          }
-        });
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Failed to process image: ${response.statusCode}')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _cameraController?.dispose();
-    _timer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -178,9 +109,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.arrow_back, color: Colors.black),
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
+                      onPressed: () => Navigator.pop(context),
                     ),
                     const Text(
                       'Real-time Monitoring',
@@ -197,7 +126,6 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   ],
                 ),
                 const SizedBox(height: 20.0),
-
                 // Driver's View Section
                 const Center(
                   child: Text(
@@ -220,69 +148,28 @@ class _MonitoringPageState extends State<MonitoringPage> {
                           borderRadius: BorderRadius.circular(12.0),
                           color: Colors.black,
                         ),
-                        child: _isAnalyzing &&
-                                _isCameraInitialized &&
-                                _cameraController != null
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(12.0),
-                                child: Transform(
-                                  alignment: Alignment.center,
-                                  transform: Matrix4.identity()
-                                    ..rotateY(math.pi),
-                                  child: CameraPreview(_cameraController!),
-                                ),
-                              )
+                        child: _isAnalyzing
+                            ? NativeView(
+                          onViewCreated: (FlutterMediapipe controller) {
+                            controller.landMarksStream.listen(_onLandmarkStream);
+                            controller.platformVersion.then((version) =>
+                                print("Platform Version: $version"));
+                          },
+                        )
                             : const Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.camera_alt,
-                                        color: Colors.grey, size: 100),
-                                    SizedBox(height: 10),
-                                    Text(
-                                      'Camera not active',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                                  ],
-                                ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.camera_alt, color: Colors.grey, size: 100),
+                              SizedBox(height: 10),
+                              Text(
+                                'Camera not active',
+                                style: TextStyle(color: Colors.white),
                               ),
+                            ],
+                          ),
+                        ),
                       ),
-                      if (_detections.isNotEmpty)
-                        ..._detections.map((detection) {
-                          const xScale =
-                              300.0 / 480; // Container width / backend width
-                          const yScale =
-                              500.0 / 720; // Container height / backend height
-
-                          final mirroredX1 = 300 -
-                              (detection['x2'].toDouble() *
-                                  xScale); // Flip horizontally
-                          final mirroredWidth =
-                              (detection['x2'] - detection['x1']).toDouble() *
-                                  xScale;
-
-                          return Positioned(
-                            left: mirroredX1
-                                .toDouble(), // Convert to double explicitly
-                            top: detection['y1'].toDouble() * yScale,
-                            width: mirroredWidth,
-                            height:
-                                (detection['y2'] - detection['y1']).toDouble() *
-                                    yScale,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.red, width: 2),
-                              ),
-                              child: Text(
-                                'Class: ${detection['class_id']}, Confidence: ${detection['confidence'].toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  color: Colors.red,
-                                  backgroundColor: Colors.white,
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
                       if (_isDrowsy)
                         Positioned(
                           top: 10,
@@ -306,12 +193,10 @@ class _MonitoringPageState extends State<MonitoringPage> {
                 Center(
                   child: ElevatedButton(
                     onPressed: toggleAnalyzing,
-                    child: Text(
-                        _isAnalyzing ? 'Stop Analyzing' : 'Start Analyzing'),
+                    child: Text(_isAnalyzing ? 'Stop Analyzing' : 'Start Analyzing'),
                   ),
                 ),
                 const SizedBox(height: 20.0),
-
                 // Driver's Status Section
                 const Text(
                   "Driver's Status",
@@ -325,13 +210,12 @@ class _MonitoringPageState extends State<MonitoringPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _statusIndicator('Awake', Colors.green),
-                    _statusIndicator('Drowsy', Colors.red),
-                    _statusIndicator('Seat belt', Colors.green),
+                    _statusIndicator('Awake', Colors.green, !_isDrowsy),
+                    _statusIndicator('Drowsy', Colors.red, _isDrowsy),
+                    _statusIndicator('Seat belt', Colors.green, true), // placeholder
                   ],
                 ),
                 const SizedBox(height: 20.0),
-
                 // Recent Alerts Section
                 const Text(
                   'Recent Alerts',
@@ -342,14 +226,13 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   ),
                 ),
                 const SizedBox(height: 10.0),
-                ListView(
+                ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    _alertTile('Distract detected', '5 minutes ago'),
-                    _alertTile('Seatbelt not fastened', '5 minutes ago'),
-                    _alertTile('Phone usage detected', '10 minutes ago'),
-                  ],
+                  itemCount: _recentAlerts.length,
+                  itemBuilder: (context, index) {
+                    return _alertTile(_recentAlerts[index], 'Just now');
+                  },
                 ),
               ],
             ),
@@ -359,16 +242,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
     );
   }
 
-  Widget _statusIndicator(String label, Color color) {
-    bool isActive = false;
-    if (label == 'Drowsy' && _isDrowsy) {
-      isActive = true;
-    } else if (label == 'Awake' && !_isDrowsy && _detections.isNotEmpty && !_detections.any((d) => d['class_id'] == 0)) {
-      isActive = true;
-    } else if (label == 'Seat belt' && _detections.isNotEmpty && _detections.any((d) => d['class_id'] == 2)) { // Adjust class_id for seat belt
-      isActive = true;
-    }
-
+  Widget _statusIndicator(String label, Color color, bool isActive) {
     return Column(
       children: [
         Stack(
@@ -407,38 +281,32 @@ class _MonitoringPageState extends State<MonitoringPage> {
   }
 
   Widget _alertTile(String alert, String time) {
-    return Column(
-      children: [
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 0.0),
-          leading: const Icon(Icons.warning, color: Colors.redAccent),
-          title: Text(
-            alert,
-            style: const TextStyle(
-              color: Colors.black,
-              fontSize: 14.0,
-            ),
-          ),
-          subtitle: Text(
-            time,
-            style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 12.0,
-            ),
-          ),
-          trailing: const Text(
-            'Clear',
-            style: TextStyle(
-              color: Colors.blueAccent,
-              fontSize: 12.0,
-            ),
-          ),
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 0.0),
+      leading: const Icon(Icons.warning, color: Colors.redAccent),
+      title: Text(
+        alert,
+        style: const TextStyle(
+          color: Colors.black,
+          fontSize: 14.0,
         ),
-      ],
+      ),
+      subtitle: Text(
+        time,
+        style: const TextStyle(
+          color: Colors.grey,
+          fontSize: 12.0,
+        ),
+      ),
+      trailing: const Text(
+        'Clear',
+        style: TextStyle(
+          color: Colors.blueAccent,
+          fontSize: 12.0,
+        ),
+      ),
     );
   }
 }
 
-void main() => runApp(const MaterialApp(
-      home: MonitoringPage(),
-    ));
+void main() => runApp(const MaterialApp(home: MonitoringPage()));
