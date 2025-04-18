@@ -42,6 +42,7 @@ flutter:
   assets:
     - assets/images/
     - assets/animations/
+    - assets/models/distraction_model.tflite
 
   fonts:
     - family: Poppins

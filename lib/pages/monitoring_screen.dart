@@ -13,35 +13,60 @@ class MonitoringPage extends StatefulWidget {
 class _MonitoringPageState extends State<MonitoringPage> {
   bool _isAnalyzing = false;
   bool _isDrowsy = false;
+  bool _isYawning = false;
   double _averageEyeOpenness = 1.0;
+  double _mouthOpenness = 0.0;
   final List<String> _recentAlerts = [];
 
-  // Instead of a Timer, use a timestamp to track when eyes closed.
+  // Track when eyes closed for drowsiness detection.
   DateTime? _eyesClosedSince;
+  // For head movement detection, track the previous nose tip position.
+  NormalizedLandmark? _prevNoseTip;
 
-  // Landmark indices used to compute eye openness.
+  // Landmark indices used for calculating metrics.
   final List<int> leftEyeIndices = [159, 145, 33, 133];
   final List<int> rightEyeIndices = [386, 374, 362, 263];
+  // For mouth openness: [upper lip, lower lip, left corner, right corner]
+  final List<int> mouthIndices = [13, 14, 78, 308];
+  // Use landmark index 1 for the nose tip.
+  final int noseTipIndex = 1;
 
   void _onLandmarkStream(NormalizedLandmarkList landmarkList) {
+    // Calculate eye openness.
     double leftOpenness = _calculateEyeOpenness(landmarkList, leftEyeIndices);
     double rightOpenness = _calculateEyeOpenness(landmarkList, rightEyeIndices);
     double average = (leftOpenness + rightOpenness) / 2.0;
 
+    // Calculate mouth openness for yawning detection.
+    double mouthOpen = _calculateMouthOpenness(landmarkList, mouthIndices);
+
+    // Detect head movement using the nose tip position.
+    NormalizedLandmark currentNose = landmarkList.landmark[noseTipIndex];
+    bool headMoved = false;
+    if (_prevNoseTip != null) {
+      double dx = currentNose.x - _prevNoseTip!.x;
+      double dy = currentNose.y - _prevNoseTip!.y;
+      double distance = math.sqrt(dx * dx + dy * dy);
+      // Adjust this threshold based on your testing.
+      if (distance > 0.05) {
+        headMoved = true;
+      }
+    }
+    _prevNoseTip = currentNose;
+
     setState(() {
       _averageEyeOpenness = average;
+      _mouthOpenness = mouthOpen;
     });
 
-    // Use a threshold (e.g., 0.1) to determine if eyes are closed.
-    const double threshold = 0.12;
-    if (average < threshold) {
-      // If eyes just closed, record the time.
+    // Drowsiness detection based on eye openness.
+    const double eyeThreshold = 0.12;
+    if (average < eyeThreshold) {
       if (_eyesClosedSince == null) {
         _eyesClosedSince = DateTime.now();
       } else {
-        // If eyes remain closed for more than 1 second, trigger the alert.
         if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(seconds: 1)) {
-          if (!_isDrowsy) { // Only update if not already flagged.
+          if (!_isDrowsy) {
             setState(() {
               _isDrowsy = true;
               _addRecentAlert("Drowsy detected");
@@ -50,13 +75,34 @@ class _MonitoringPageState extends State<MonitoringPage> {
         }
       }
     } else {
-      // Reset the timer if eyes open.
       _eyesClosedSince = null;
       if (_isDrowsy) {
         setState(() {
           _isDrowsy = false;
         });
       }
+    }
+
+    // Yawn detection using mouth openness threshold.
+    const double mouthThreshold = 0.465;
+    if (mouthOpen > mouthThreshold) {
+      if (!_isYawning) {
+        setState(() {
+          _isYawning = true;
+          _addRecentAlert("Yawning detected");
+        });
+      }
+    } else {
+      if (_isYawning) {
+        setState(() {
+          _isYawning = false;
+        });
+      }
+    }
+
+    // Add a head movement alert if detected.
+    if (headMoved) {
+      _addRecentAlert("Head movement detected");
     }
   }
 
@@ -71,6 +117,19 @@ class _MonitoringPageState extends State<MonitoringPage> {
     double vertical = (upper.y - lower.y).abs();
     double horizontal = (left.x - right.x).abs();
     return horizontal == 0 ? 1.0 : vertical / horizontal;
+  }
+
+  double _calculateMouthOpenness(
+      NormalizedLandmarkList landmarks, List<int> indices) {
+    if (landmarks.landmark.length <= indices.reduce(math.max)) return 0.0;
+    NormalizedLandmark upperLip = landmarks.landmark[indices[0]];
+    NormalizedLandmark lowerLip = landmarks.landmark[indices[1]];
+    NormalizedLandmark leftCorner = landmarks.landmark[indices[2]];
+    NormalizedLandmark rightCorner = landmarks.landmark[indices[3]];
+
+    double vertical = (upperLip.y - lowerLip.y).abs();
+    double horizontal = (leftCorner.x - rightCorner.x).abs();
+    return horizontal == 0 ? 0.0 : vertical / horizontal;
   }
 
   void _addRecentAlert(String alert) {
@@ -88,6 +147,8 @@ class _MonitoringPageState extends State<MonitoringPage> {
       if (!_isAnalyzing) {
         _eyesClosedSince = null;
         _isDrowsy = false;
+        _isYawning = false;
+        _prevNoseTip = null;
       }
     });
   }
@@ -186,6 +247,22 @@ class _MonitoringPageState extends State<MonitoringPage> {
                             ),
                           ),
                         ),
+                      if (_isYawning)
+                        Positioned(
+                          top: 50,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.all(8.0),
+                            color: Colors.orange.withOpacity(0.8),
+                            child: const Text(
+                              'WARNING: Yawning detected!',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -210,10 +287,23 @@ class _MonitoringPageState extends State<MonitoringPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _statusIndicator('Awake', Colors.green, !_isDrowsy),
-                    _statusIndicator('Drowsy', Colors.red, _isDrowsy),
-                    _statusIndicator('Seat belt', Colors.green, true), // placeholder
+                    _statusIndicator(
+                      _isDrowsy ? 'Drowsy' : 'Awake',
+                      _isDrowsy ? Colors.red : Colors.green,
+                      _averageEyeOpenness.clamp(0.0, 1.0),
+                    ),
+                    _statusIndicator(
+                      'Yawning',
+                      Colors.orange,
+                      _isYawning ? 0.8 : 0.2, // Example confidence level
+                    ),
+                    _statusIndicator(
+                      'Seat belt',
+                      Colors.green,
+                      0.8, // Placeholder fixed confidence
+                    ),
                   ],
+
                 ),
                 const SizedBox(height: 20.0),
                 // Recent Alerts Section
@@ -242,7 +332,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
     );
   }
 
-  Widget _statusIndicator(String label, Color color, bool isActive) {
+  Widget _statusIndicator(String label, Color color, double confidence) {
     return Column(
       children: [
         Stack(
@@ -252,7 +342,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
               width: 60.0,
               height: 60.0,
               child: CircularProgressIndicator(
-                value: isActive ? 0.7 : 0.3,
+                value: confidence.clamp(0.0, 1.0),
                 strokeWidth: 5.0,
                 valueColor: AlwaysStoppedAnimation<Color>(color),
                 backgroundColor: Colors.grey[300],
@@ -263,7 +353,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
               height: 30.0,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isActive ? color : Colors.grey,
+                color: confidence > 0.2 ? color : Colors.grey,
               ),
             ),
           ],
@@ -274,6 +364,13 @@ class _MonitoringPageState extends State<MonitoringPage> {
           style: const TextStyle(
             color: Colors.black,
             fontSize: 12.0,
+          ),
+        ),
+        Text(
+          (confidence * 100).toStringAsFixed(0) + '%',
+          style: const TextStyle(
+            fontSize: 10.0,
+            color: Colors.grey,
           ),
         ),
       ],
