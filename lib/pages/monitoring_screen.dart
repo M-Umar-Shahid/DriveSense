@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_mediapipe/flutter_mediapipe.dart';
 import 'package:flutter_mediapipe/gen/landmark.pb.dart';
+import 'package:camera/camera.dart';
+import '../utils/distraction_detector.dart';
 
 class MonitoringPage extends StatefulWidget {
   const MonitoringPage({Key? key}) : super(key: key);
@@ -17,61 +19,89 @@ class _MonitoringPageState extends State<MonitoringPage> {
   double _averageEyeOpenness = 1.0;
   double _mouthOpenness = 0.0;
   final List<String> _recentAlerts = [];
-
-  // Track when eyes closed for drowsiness detection.
   DateTime? _eyesClosedSince;
-  // For head movement detection, track the previous nose tip position.
-  NormalizedLandmark? _prevNoseTip;
+  bool _isReady = false;
 
-  // Landmark indices used for calculating metrics.
+  // Distraction detection
+  bool _isDistracted = false;
+  String _distractionLabel = "Safe Driving";
+  DistractionDetector? _distractionDetector;
+  CameraDescription? _cameraDescription;
+
   final List<int> leftEyeIndices = [159, 145, 33, 133];
   final List<int> rightEyeIndices = [386, 374, 362, 263];
-  // For mouth openness: [upper lip, lower lip, left corner, right corner]
   final List<int> mouthIndices = [13, 14, 78, 308];
-  // Use landmark index 1 for the nose tip.
-  final int noseTipIndex = 1;
+
+  final List<String> distractionLabels = [
+    "Safe Driving",
+    "Texting Right",
+    "Phone Right",
+    "Texting Left",
+    "Phone Left",
+    "Radio",
+    "Drinking",
+    "Reaching Behind",
+    "Hair/Makeup",
+    "Talking to Passenger",
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeDistractionSystem();
+  }
+
+  Future<void> _initializeDistractionSystem() async {
+    try {
+      final cameras = await availableCameras();
+      _cameraDescription = cameras.first;
+      _distractionDetector = DistractionDetector();
+
+      await _distractionDetector!.init(
+        _cameraDescription!,
+        onDetection: (isDistracted, predictedClass) {
+          print("🚨 Callback: $predictedClass | ${isDistracted ? "Distracted" : "Safe"}");
+          setState(() {
+            _isDistracted = isDistracted;
+            _distractionLabel = distractionLabels[predictedClass];
+            if (isDistracted) {
+              _addRecentAlert("Distraction: $_distractionLabel");
+            }
+          });
+        },
+      );
+
+      setState(() {
+        _isReady = true;
+      });
+
+      print("✅ Distraction system initialized");
+    } catch (e) {
+      print("❌ Failed to initialize distraction system: $e");
+    }
+  }
 
   void _onLandmarkStream(NormalizedLandmarkList landmarkList) {
-    // Calculate eye openness.
     double leftOpenness = _calculateEyeOpenness(landmarkList, leftEyeIndices);
     double rightOpenness = _calculateEyeOpenness(landmarkList, rightEyeIndices);
     double average = (leftOpenness + rightOpenness) / 2.0;
-
-    // Calculate mouth openness for yawning detection.
     double mouthOpen = _calculateMouthOpenness(landmarkList, mouthIndices);
-
-    // Detect head movement using the nose tip position.
-    NormalizedLandmark currentNose = landmarkList.landmark[noseTipIndex];
-    bool headMoved = false;
-    if (_prevNoseTip != null) {
-      double dx = currentNose.x - _prevNoseTip!.x;
-      double dy = currentNose.y - _prevNoseTip!.y;
-      double distance = math.sqrt(dx * dx + dy * dy);
-      // Adjust this threshold based on your testing.
-      if (distance > 0.05) {
-        headMoved = true;
-      }
-    }
-    _prevNoseTip = currentNose;
 
     setState(() {
       _averageEyeOpenness = average;
       _mouthOpenness = mouthOpen;
     });
 
-    // Drowsiness detection based on eye openness.
     const double eyeThreshold = 0.12;
     if (average < eyeThreshold) {
       if (_eyesClosedSince == null) {
         _eyesClosedSince = DateTime.now();
-      } else {
-        if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(seconds: 1)) {
-          if (!_isDrowsy) {
-            setState(() {
-              _isDrowsy = true;
-              _addRecentAlert("Drowsy detected");
-            });
-          }
+      } else if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(seconds: 1)) {
+        if (!_isDrowsy) {
+          setState(() {
+            _isDrowsy = true;
+            _addRecentAlert("Drowsy detected");
+          });
         }
       }
     } else {
@@ -83,7 +113,6 @@ class _MonitoringPageState extends State<MonitoringPage> {
       }
     }
 
-    // Yawn detection using mouth openness threshold.
     const double mouthThreshold = 0.465;
     if (mouthOpen > mouthThreshold) {
       if (!_isYawning) {
@@ -99,34 +128,25 @@ class _MonitoringPageState extends State<MonitoringPage> {
         });
       }
     }
-
-    // Add a head movement alert if detected.
-    if (headMoved) {
-      _addRecentAlert("Head movement detected");
-    }
   }
 
-  double _calculateEyeOpenness(
-      NormalizedLandmarkList landmarks, List<int> indices) {
+  double _calculateEyeOpenness(NormalizedLandmarkList landmarks, List<int> indices) {
     if (landmarks.landmark.length <= indices.reduce(math.max)) return 1.0;
-    NormalizedLandmark upper = landmarks.landmark[indices[0]];
-    NormalizedLandmark lower = landmarks.landmark[indices[1]];
-    NormalizedLandmark left = landmarks.landmark[indices[2]];
-    NormalizedLandmark right = landmarks.landmark[indices[3]];
-
+    final upper = landmarks.landmark[indices[0]];
+    final lower = landmarks.landmark[indices[1]];
+    final left = landmarks.landmark[indices[2]];
+    final right = landmarks.landmark[indices[3]];
     double vertical = (upper.y - lower.y).abs();
     double horizontal = (left.x - right.x).abs();
     return horizontal == 0 ? 1.0 : vertical / horizontal;
   }
 
-  double _calculateMouthOpenness(
-      NormalizedLandmarkList landmarks, List<int> indices) {
+  double _calculateMouthOpenness(NormalizedLandmarkList landmarks, List<int> indices) {
     if (landmarks.landmark.length <= indices.reduce(math.max)) return 0.0;
-    NormalizedLandmark upperLip = landmarks.landmark[indices[0]];
-    NormalizedLandmark lowerLip = landmarks.landmark[indices[1]];
-    NormalizedLandmark leftCorner = landmarks.landmark[indices[2]];
-    NormalizedLandmark rightCorner = landmarks.landmark[indices[3]];
-
+    final upperLip = landmarks.landmark[indices[0]];
+    final lowerLip = landmarks.landmark[indices[1]];
+    final leftCorner = landmarks.landmark[indices[2]];
+    final rightCorner = landmarks.landmark[indices[3]];
     double vertical = (upperLip.y - lowerLip.y).abs();
     double horizontal = (leftCorner.x - rightCorner.x).abs();
     return horizontal == 0 ? 0.0 : vertical / horizontal;
@@ -144,11 +164,12 @@ class _MonitoringPageState extends State<MonitoringPage> {
   void toggleAnalyzing() {
     setState(() {
       _isAnalyzing = !_isAnalyzing;
-      if (!_isAnalyzing) {
-        _eyesClosedSince = null;
-        _isDrowsy = false;
-        _isYawning = false;
-        _prevNoseTip = null;
+      if (_isAnalyzing) {
+        print("📷 Starting distraction detection...");
+        _distractionDetector?.startDetection();
+      } else {
+        print("🛑 Stopping detection...");
+        _distractionDetector?.stopDetection();
       }
     });
   }
@@ -164,7 +185,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Navigation Bar
+                // Top Navigation
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -187,7 +208,6 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   ],
                 ),
                 const SizedBox(height: 20.0),
-                // Driver's View Section
                 const Center(
                   child: Text(
                     "Driver's View",
@@ -213,8 +233,6 @@ class _MonitoringPageState extends State<MonitoringPage> {
                             ? NativeView(
                           onViewCreated: (FlutterMediapipe controller) {
                             controller.landMarksStream.listen(_onLandmarkStream);
-                            controller.platformVersion.then((version) =>
-                                print("Platform Version: $version"));
                           },
                         )
                             : const Center(
@@ -223,98 +241,40 @@ class _MonitoringPageState extends State<MonitoringPage> {
                             children: [
                               Icon(Icons.camera_alt, color: Colors.grey, size: 100),
                               SizedBox(height: 10),
-                              Text(
-                                'Camera not active',
-                                style: TextStyle(color: Colors.white),
-                              ),
+                              Text('Camera not active', style: TextStyle(color: Colors.white)),
                             ],
                           ),
                         ),
                       ),
-                      if (_isDrowsy)
-                        Positioned(
-                          top: 10,
-                          left: 10,
-                          child: Container(
-                            padding: const EdgeInsets.all(8.0),
-                            color: Colors.red.withOpacity(0.8),
-                            child: const Text(
-                              'WARNING: Driver Drowsy!',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (_isYawning)
-                        Positioned(
-                          top: 50,
-                          left: 10,
-                          child: Container(
-                            padding: const EdgeInsets.all(8.0),
-                            color: Colors.orange.withOpacity(0.8),
-                            child: const Text(
-                              'WARNING: Yawning detected!',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
+                      if (_isDrowsy) _warningOverlay("WARNING: Driver Drowsy!", Colors.red, 10),
+                      if (_isYawning) _warningOverlay("WARNING: Yawning detected!", Colors.orange, 50),
+                      if (_isDistracted) _warningOverlay("WARNING: $_distractionLabel", Colors.purple, 90),
                     ],
                   ),
                 ),
                 const SizedBox(height: 10.0),
                 Center(
                   child: ElevatedButton(
-                    onPressed: toggleAnalyzing,
+                    onPressed: _isReady ? toggleAnalyzing : null,
                     child: Text(_isAnalyzing ? 'Stop Analyzing' : 'Start Analyzing'),
                   ),
                 ),
                 const SizedBox(height: 20.0),
-                // Driver's Status Section
                 const Text(
                   "Driver's Status",
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 16.0,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(color: Colors.black, fontSize: 16.0, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10.0),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _statusIndicator(
-                      _isDrowsy ? 'Drowsy' : 'Awake',
-                      _isDrowsy ? Colors.red : Colors.green,
-                      _averageEyeOpenness.clamp(0.0, 1.0),
-                    ),
-                    _statusIndicator(
-                      'Yawning',
-                      Colors.orange,
-                      _isYawning ? 0.8 : 0.2, // Example confidence level
-                    ),
-                    _statusIndicator(
-                      'Seat belt',
-                      Colors.green,
-                      0.8, // Placeholder fixed confidence
-                    ),
+                    _statusIndicator(_isDrowsy ? 'Drowsy' : 'Awake', _isDrowsy ? Colors.red : Colors.green, _averageEyeOpenness),
+                    _statusIndicator('Yawning', Colors.orange, _isYawning ? 0.8 : 0.2),
+                    _statusIndicator('Distraction', Colors.purple, _isDistracted ? 0.8 : 0.2),
                   ],
-
                 ),
                 const SizedBox(height: 20.0),
-                // Recent Alerts Section
-                const Text(
-                  'Recent Alerts',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 16.0,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                const Text('Recent Alerts', style: TextStyle(color: Colors.black, fontSize: 16.0, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10.0),
                 ListView.builder(
                   shrinkWrap: true,
@@ -359,21 +319,24 @@ class _MonitoringPageState extends State<MonitoringPage> {
           ],
         ),
         const SizedBox(height: 5.0),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.black,
-            fontSize: 12.0,
-          ),
-        ),
-        Text(
-          (confidence * 100).toStringAsFixed(0) + '%',
-          style: const TextStyle(
-            fontSize: 10.0,
-            color: Colors.grey,
-          ),
-        ),
+        Text(label, style: const TextStyle(color: Colors.black, fontSize: 12.0)),
+        Text("${(confidence * 100).toStringAsFixed(0)}%", style: const TextStyle(fontSize: 10.0, color: Colors.grey)),
       ],
+    );
+  }
+
+  Widget _warningOverlay(String message, Color bgColor, double top) {
+    return Positioned(
+      top: top,
+      left: 10,
+      child: Container(
+        padding: const EdgeInsets.all(8.0),
+        color: bgColor.withOpacity(0.8),
+        child: Text(
+          message,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+      ),
     );
   }
 
@@ -381,29 +344,9 @@ class _MonitoringPageState extends State<MonitoringPage> {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 0.0),
       leading: const Icon(Icons.warning, color: Colors.redAccent),
-      title: Text(
-        alert,
-        style: const TextStyle(
-          color: Colors.black,
-          fontSize: 14.0,
-        ),
-      ),
-      subtitle: Text(
-        time,
-        style: const TextStyle(
-          color: Colors.grey,
-          fontSize: 12.0,
-        ),
-      ),
-      trailing: const Text(
-        'Clear',
-        style: TextStyle(
-          color: Colors.blueAccent,
-          fontSize: 12.0,
-        ),
-      ),
+      title: Text(alert, style: const TextStyle(color: Colors.black, fontSize: 14.0)),
+      subtitle: Text(time, style: const TextStyle(color: Colors.grey, fontSize: 12.0)),
+      trailing: const Text('Clear', style: TextStyle(color: Colors.blueAccent, fontSize: 12.0)),
     );
   }
 }
-
-void main() => runApp(const MaterialApp(home: MonitoringPage()));
