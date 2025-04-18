@@ -28,6 +28,7 @@ dependencies:
   image: ^4.3.0
   http: ^1.3.0
   logging: ^1.2.0
+  tflite_flutter: ^0.11.0
 
 dev_dependencies:
   flutter_test:
@@ -42,6 +43,8 @@ flutter:
   assets:
     - assets/images/
     - assets/animations/
+    - assets/models/best_float32.tflite
+    - assets/sample.jpg
 
   fonts:
     - family: Poppins
