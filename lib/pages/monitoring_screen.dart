@@ -6,6 +6,10 @@ import 'package:flutter_mediapipe/flutter_mediapipe.dart';
 import 'package:flutter_mediapipe/gen/landmark.pb.dart';
 import 'package:image/image.dart' as img;
 import '../utils/distraction_detector.dart';
+import 'dart:math';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class MonitoringPage extends StatefulWidget {
   const MonitoringPage({Key? key}) : super(key: key);
@@ -19,11 +23,11 @@ class _MonitoringPageState extends State<MonitoringPage> {
   bool _isDrowsy = false;
   bool _isYawning = false;
   bool _isDistracted = false;
-
+  img.Image? _lastFrameImage;
   double _averageEyeOpenness = 1.0;
   double _mouthOpenness = 0.0;
   String _distractionLabel = "Safe Driving";
-
+  Map<String, DateTime> _lastSavedTimes = {};
   DateTime? _eyesClosedSince;
   final List<String> _recentAlerts = [];
   final DistractionDetector _distractionDetector = DistractionDetector();
@@ -67,6 +71,46 @@ class _MonitoringPageState extends State<MonitoringPage> {
     debugPrint("✅ Distraction model loaded");
   }
 
+  Future<void> _saveDetectionSnapshot({
+    required img.Image image,
+    required String alertType,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final timestamp = DateTime.now();
+    final fileName = "detections/${user.uid}/${timestamp.millisecondsSinceEpoch}_${alertType}_${Random().nextInt(9999)}.jpg";
+
+    // Convert image to JPEG bytes
+    final jpeg = img.encodeJpg(image, quality: 85);
+
+    // Upload to Firebase Storage
+    final ref = FirebaseStorage.instance.ref().child(fileName);
+    final uploadTask = await ref.putData(Uint8List.fromList(jpeg));
+    final imageUrl = await ref.getDownloadURL();
+
+    // Save alert metadata to Firestore
+    await FirebaseFirestore.instance.collection("detections").add({
+      "uid": user.uid,
+      "alertType": alertType,
+      "imageUrl": imageUrl,
+      "timestamp": Timestamp.fromDate(timestamp),
+    });
+
+    debugPrint("📸 Snapshot saved: $imageUrl");
+  }
+
+  bool _canSave(String alertType, {Duration cooldown = const Duration(seconds: 10)}) {
+    final now = DateTime.now();
+    final lastSaved = _lastSavedTimes[alertType];
+    if (lastSaved == null || now.difference(lastSaved) >= cooldown) {
+      _lastSavedTimes[alertType] = now;
+      return true;
+    }
+    return false;
+  }
+
+
   void _listenToFrameStream() {
     _frameSubscription = _frameStream.receiveBroadcastStream().listen(
           (event) {
@@ -75,6 +119,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
         if (event is Uint8List) {
           final image = img.decodeImage(event);
           if (image != null) {
+            _lastFrameImage = image;
             final input = _distractionDetector.preprocessImage(image);
             final output = _distractionDetector.run(input);
             final int predictedClass =
@@ -86,6 +131,10 @@ class _MonitoringPageState extends State<MonitoringPage> {
               _distractionLabel = distractionLabels[predictedClass];
               if (isDistracted) {
                 _addRecentAlert("Distraction: $_distractionLabel");
+                _saveDetectionSnapshot(
+                  image: image,
+                  alertType: _distractionLabel,
+                );
               }
             });
           }
@@ -113,11 +162,14 @@ class _MonitoringPageState extends State<MonitoringPage> {
     if (average < eyeThreshold) {
       _eyesClosedSince ??= DateTime.now();
       if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(seconds: 1)) {
-        if (!_isDrowsy) {
-          setState(() {
-            _isDrowsy = true;
-            _addRecentAlert("Drowsy detected");
-          });
+        if (_canSave("Drowsy")&&!_isDrowsy && _lastFrameImage != null) {
+          setState(() => _isDrowsy = true);
+          _addRecentAlert("Drowsy detected");
+
+          _saveDetectionSnapshot(
+            image: _lastFrameImage!,
+            alertType: "Drowsy",
+          );
         }
       }
     } else {
@@ -129,11 +181,14 @@ class _MonitoringPageState extends State<MonitoringPage> {
 
     const mouthThreshold = 0.465;
     if (mouthOpen > mouthThreshold) {
-      if (!_isYawning) {
-        setState(() {
-          _isYawning = true;
-          _addRecentAlert("Yawning detected");
-        });
+      if (_canSave("Yawning")&&!_isYawning && _lastFrameImage != null) {
+        setState(() => _isYawning = true);
+        _addRecentAlert("Yawning detected");
+
+        _saveDetectionSnapshot(
+          image: _lastFrameImage!,
+          alertType: "Yawning",
+        );
       }
     } else {
       if (_isYawning) {

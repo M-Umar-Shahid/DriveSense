@@ -35,6 +35,8 @@ import com.google.mediapipe.glutil.EglManager;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import com.google.mediapipe.formats.proto.LandmarkProto.NormalizedLandmarkList;
+
 
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodCall;
