@@ -24,9 +24,9 @@ class CustomSettingButton extends StatelessWidget {
       ),
       child: IconButton(
         icon: const Icon(
-          Icons.settings, // Back arrow icon
-          color: Colors.black, // Icon color
-          size: 20, // Adjust icon size
+          Icons.person, // Back arrow icon
+          color: Colors.blue, // Icon color
+          size: 25, // Adjust icon size
         ),
         onPressed: onPressed, // Callback function
         splashColor: Colors.transparent, // Remove ripple effect

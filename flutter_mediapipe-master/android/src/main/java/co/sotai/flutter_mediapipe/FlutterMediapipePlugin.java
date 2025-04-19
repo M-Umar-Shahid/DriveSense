@@ -1,5 +1,6 @@
 package co.sotai.flutter_mediapipe;
 
+
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import androidx.annotation.NonNull;
@@ -11,6 +12,8 @@ import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.PluginRegistry.RequestPermissionsResultListener;
 import io.flutter.plugin.platform.PlatformViewFactory;
 import io.flutter.plugin.platform.PlatformViewRegistry;
+import io.flutter.plugin.common.EventChannel;
+
 
 /**
  * FlutterMediapipePlugin
@@ -23,18 +26,36 @@ public class FlutterMediapipePlugin implements FlutterPlugin, ActivityAware {
     private BinaryMessenger messenger;
     private PlatformViewFactory factory;
 
+    private static final String FRAME_CHANNEL = "flutter_mediapipe/frameStream";
+    private EventChannel frameEventChannel;
+    private EventChannel.EventSink frameSink;
+
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
         registry = binding.getPlatformViewRegistry();
         messenger = binding.getBinaryMessenger();
+
+        frameEventChannel = new EventChannel(binding.getBinaryMessenger(), FRAME_CHANNEL);
+        frameEventChannel.setStreamHandler(new EventChannel.StreamHandler() {
+            @Override
+            public void onListen(Object arguments, EventChannel.EventSink events) {
+                frameSink = events;
+            }
+
+            @Override
+            public void onCancel(Object arguments) {
+                frameSink = null;
+            }
+        });
     }
+
 
     @Override
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {}
 
     @Override
     public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
-        factory = new NativeViewFactory(messenger, binding.getActivity());
+        factory = new NativeViewFactory(messenger, binding.getActivity(), frameSink);
         registry.registerViewFactory(VIEW, factory);
         binding.addRequestPermissionsResultListener(new PermissionsListener(factory));
     }

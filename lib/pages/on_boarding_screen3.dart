@@ -74,7 +74,7 @@ class OnboardingScreen3 extends StatelessWidget {
                 children: [
                   // Skip Button
                   CustomSkipButton(onPressed: () {
-                    Navigator.push(
+                    Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(builder: (context) => const GettingStarted()),
                     );
@@ -83,7 +83,7 @@ class OnboardingScreen3 extends StatelessWidget {
                   // Next Button
                   ElevatedButton(
                     onPressed: () {
-                      Navigator.push(
+                      Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(builder: (context) => const GettingStarted()),
                       );

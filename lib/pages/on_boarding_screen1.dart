@@ -61,7 +61,7 @@ class OnboardingScreen1 extends StatelessWidget {
                 children: [
                   // Skip Button
                   CustomSkipButton(onPressed: () {
-                    Navigator.push(
+                    Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(builder: (context) => const GettingStarted()),
                     );

@@ -32,6 +32,8 @@ class _SignUpPageState extends State<SignUpPage> {
         email: email,
         password: password,
       );
+      await userCredential.user?.updateDisplayName(_nameController.text.trim());
+      await userCredential.user?.reload(); // Optional but recommended
       _showMessage('Sign Up Successful! Welcome, ${userCredential.user?.email}');
       Navigator.pushReplacement(
         context,

@@ -12,6 +12,9 @@ import android.util.Size;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.PixelCopy;
+import android.graphics.Bitmap;
+
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -34,14 +37,21 @@ import java.util.List;
 import java.util.Map;
 
 import io.flutter.plugin.common.BinaryMessenger;
-import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.platform.PlatformView;
+import android.graphics.Bitmap;
+import java.io.ByteArrayOutputStream;
+import io.flutter.plugin.common.EventChannel;
+
 
 public class NativeView implements PlatformView, MethodCallHandler {
+
+
+    private EventChannel.EventSink frameSink;
+    private EventChannel frameEventChannel;
 
     private static final String TAG = "FlutterMediapipePlugin";
 
@@ -85,7 +95,30 @@ public class NativeView implements PlatformView, MethodCallHandler {
     // For event channel
     private final Handler handler = new Handler(Looper.getMainLooper());
 
+
     NativeView(@NonNull Context context, int id, @Nullable Map<String, Object> creationParams,
+               BinaryMessenger messenger, Activity activity, EventChannel.EventSink frameSink) {
+        this.activity = activity;
+        this.frameSink = frameSink;
+        try {
+            applicationInfo = activity.getPackageManager()
+                    .getApplicationInfo(activity.getPackageName(), PackageManager.GET_META_DATA);
+        } catch (Exception e) {
+            Log.e(TAG, "Cannot find application info: " + e);
+        }
+
+        setChannel(messenger);
+        setupPreviewDisplayView(activity);
+        AndroidAssetUtil.initializeNativeAssetManager(activity);
+        setupProcess(activity);
+        PermissionHelper.checkAndRequestCameraPermissions(activity);
+        onResume();
+    }
+
+
+
+
+        NativeView(@NonNull Context context, int id, @Nullable Map<String, Object> creationParams,
                BinaryMessenger messenger, Activity activity) {
         this.activity = activity;
         try {
@@ -120,9 +153,25 @@ public class NativeView implements PlatformView, MethodCallHandler {
     private void setChannel(BinaryMessenger messenger) {
         methodChannel = new MethodChannel(messenger, "sotai.co/flutter_mediapipe");
         methodChannel.setMethodCallHandler(this);
+
         eventChannel = new EventChannel(messenger, "sotai.co/flutter_mediapipe_event");
         eventChannel.setStreamHandler(landMarksStreamHandler());
+
+        // ✅ ADD THIS FOR FRAME STREAMING
+        frameEventChannel = new EventChannel(messenger, "flutter_mediapipe/frameStream");
+        frameEventChannel.setStreamHandler(new EventChannel.StreamHandler() {
+            @Override
+            public void onListen(Object arguments, EventChannel.EventSink events) {
+                frameSink = events;
+            }
+
+            @Override
+            public void onCancel(Object arguments) {
+                frameSink = null;
+            }
+        });
     }
+
 
     public void onResume() {
         converter = new ExternalTextureConverter(eglManager.getContext());
@@ -152,6 +201,17 @@ public class NativeView implements PlatformView, MethodCallHandler {
         return null; // No preference and let the camera (helper) decide.
     }
 
+    private void startFrameCaptureLoop() {
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                captureAndSendFrame(); // <-- uses PixelCopy
+                handler.postDelayed(this, 15000);
+            }
+        }, 0);
+    }
+
+
     public void startCamera() {
         cameraHelper = new CameraXPreviewHelper();
         cameraHelper.setOnCameraStartedListener(new CameraXPreviewHelper.OnCameraStartedListener() {
@@ -159,6 +219,16 @@ public class NativeView implements PlatformView, MethodCallHandler {
             public void onCameraStarted(@Nullable SurfaceTexture surfaceTexture) {
                 previewFrameTexture = surfaceTexture;
                 previewDisplayView.setVisibility(View.VISIBLE);
+
+                Log.d(TAG, "📷 Camera started — starting frame capture loop");
+
+                // Wait a bit for rendering to start
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        startFrameCaptureLoop(); // ✅ Only now start the loop
+                    }
+                }, 3000); // 3 seconds delay
             }
         });
         try {
@@ -168,6 +238,8 @@ public class NativeView implements PlatformView, MethodCallHandler {
             Log.e(TAG, "Error has occuer at camera start: " + e);
         }
     }
+
+
 
     @Override
     public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
@@ -251,4 +323,32 @@ public class NativeView implements PlatformView, MethodCallHandler {
             }
         };
     }
+    private void captureAndSendFrame() {
+        Bitmap bitmap = Bitmap.createBitmap(previewDisplayView.getWidth(), previewDisplayView.getHeight(), Bitmap.Config.ARGB_8888);
+        PixelCopy.request(previewDisplayView, bitmap, copyResult -> {
+            if (copyResult == PixelCopy.SUCCESS) {
+                Log.d(TAG, "✅ PixelCopy success, sending frame...");
+                sendFrameToFlutter(bitmap);
+            } else {
+                Log.e(TAG, "❌ PixelCopy failed: " + copyResult);
+            }
+        }, handler);
+    }
+
+    private void sendFrameToFlutter(Bitmap bitmap) {
+        if (frameSink == null || bitmap == null) return;
+
+        try {
+            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, stream);
+            byte[] jpegData = stream.toByteArray();
+            frameSink.success(jpegData);
+            Log.d("FlutterMediapipe", "✅ Sent JPEG frame to Flutter: " + jpegData.length + " bytes");
+        } catch (Exception e) {
+            Log.e("FlutterMediapipe", "❌ Failed to send frame: " + e.getMessage());
+        }
+    }
+
+
+
 }

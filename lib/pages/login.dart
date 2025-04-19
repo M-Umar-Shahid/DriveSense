@@ -1,4 +1,4 @@
-import 'package:drivesense/pages/bottom_navigation.dart';
+import 'package:drivesense/pages/dashboard.dart';
 import 'package:drivesense/pages/forgot_password.dart';
 import 'package:drivesense/pages/signup.dart';
 import 'package:flutter/material.dart';
@@ -30,7 +30,7 @@ class _LoginPageState extends State<LoginPage> {
       // If successful, navigate to the bottom navigation page
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const BottomNavigation()),
+        MaterialPageRoute(builder: (context) => const Dashboard()),
       );
     } catch (e) {
       // Handle errors such as wrong credentials

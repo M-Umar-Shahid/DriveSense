@@ -1,14 +1,25 @@
 import 'package:drivesense/pages/login_signup.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class GettingStarted extends StatelessWidget {
   const GettingStarted({super.key});
+
+  Future<void> _completeOnboarding(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('hasSeenOnboarding', true);
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginSignup()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        color: Color(0xFF1976D2), // Blue background color
+        color: const Color(0xFF1976D2), // Blue background color
         child: Stack(
           children: [
             // Centered Logo
@@ -32,20 +43,15 @@ class GettingStarted extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 20.0),
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const LoginSignup()),
-                    );
-                  },
+                  onPressed: () => _completeOnboarding(context),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(50.0),
                     ),
-                    padding: EdgeInsets.symmetric(horizontal: 60.0, vertical: 12.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 60.0, vertical: 12.0),
                   ),
-                  child: Text(
+                  child: const Text(
                     'Get Started',
                     style: TextStyle(
                       color: Color(0xFF1976D2),

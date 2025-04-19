@@ -1,9 +1,11 @@
-import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_mediapipe/flutter_mediapipe.dart';
 import 'package:flutter_mediapipe/gen/landmark.pb.dart';
-import 'package:camera/camera.dart';
+import 'package:image/image.dart' as img;
 import '../utils/distraction_detector.dart';
+
 
 class MonitoringPage extends StatefulWidget {
   const MonitoringPage({Key? key}) : super(key: key);
@@ -16,17 +18,17 @@ class _MonitoringPageState extends State<MonitoringPage> {
   bool _isAnalyzing = false;
   bool _isDrowsy = false;
   bool _isYawning = false;
+  bool _isDistracted = false;
+
   double _averageEyeOpenness = 1.0;
   double _mouthOpenness = 0.0;
-  final List<String> _recentAlerts = [];
-  DateTime? _eyesClosedSince;
-  bool _isReady = false;
-
-  // Distraction detection
-  bool _isDistracted = false;
   String _distractionLabel = "Safe Driving";
-  DistractionDetector? _distractionDetector;
-  CameraDescription? _cameraDescription;
+
+  DateTime? _eyesClosedSince;
+  final List<String> _recentAlerts = [];
+  final DistractionDetector _distractionDetector = DistractionDetector();
+  static const EventChannel _frameStream = EventChannel("flutter_mediapipe/frameStream");
+
 
   final List<int> leftEyeIndices = [159, 145, 33, 133];
   final List<int> rightEyeIndices = [386, 374, 362, 263];
@@ -48,50 +50,66 @@ class _MonitoringPageState extends State<MonitoringPage> {
   @override
   void initState() {
     super.initState();
-    _initializeDistractionSystem();
+    _initDistractionModel();
   }
 
-  Future<void> _initializeDistractionSystem() async {
-    try {
-      final cameras = await availableCameras();
-      _cameraDescription = cameras.first;
-      _distractionDetector = DistractionDetector();
+  Future<void> _initDistractionModel() async {
+    await _distractionDetector.loadModel();
+    print("✅ Distraction model loaded");
+  }
 
-      await _distractionDetector!.init(
-        _cameraDescription!,
-        onDetection: (isDistracted, predictedClass) {
-          print("🚨 Callback: $predictedClass | ${isDistracted ? "Distracted" : "Safe"}");
-          setState(() {
-            _isDistracted = isDistracted;
-            _distractionLabel = distractionLabels[predictedClass];
-            if (isDistracted) {
-              _addRecentAlert("Distraction: $_distractionLabel");
-            }
-          });
-        },
-      );
+  void _listenToFrameStream() {
+    print("👂 Listening to frame stream...");
+    _frameStream.receiveBroadcastStream().listen(
+          (event) {
+        print("📸 Frame received in Dart!");
+        if (event is Uint8List) {
+          final image = img.decodeImage(event);
+          if (image != null) {
+            print("🧠 Decoded image — running model...");
+            final input = _distractionDetector.preprocessImage(image);
+            final output = _distractionDetector.run(input);
 
-      setState(() {
-        _isReady = true;
-      });
+            final int predictedClass =
+            output.indexWhere((e) => e == output.reduce((a, b) => a > b ? a : b));
+            final bool isDistracted = predictedClass != 0;
 
-      print("✅ Distraction system initialized");
-    } catch (e) {
-      print("❌ Failed to initialize distraction system: $e");
-    }
+            print("🚨 Prediction: $predictedClass → ${isDistracted ? "Distracted" : "Safe"}");
+            print("📊 Output scores: ${output.map((v) => v.toStringAsFixed(3)).toList()}");
+
+            setState(() {
+              _isDistracted = isDistracted;
+              _distractionLabel = distractionLabels[predictedClass];
+              if (isDistracted) {
+                _addRecentAlert("Distraction: $_distractionLabel");
+              }
+            });
+          } else {
+            print("❌ Failed to decode image from bytes");
+          }
+        } else {
+          print("❌ Event is not a Uint8List");
+        }
+      },
+      onError: (error) {
+        print("❌ Error in frame stream: $error");
+      },
+      cancelOnError: true,
+    );
   }
 
   void _onLandmarkStream(NormalizedLandmarkList landmarkList) {
-    double leftOpenness = _calculateEyeOpenness(landmarkList, leftEyeIndices);
-    double rightOpenness = _calculateEyeOpenness(landmarkList, rightEyeIndices);
-    double average = (leftOpenness + rightOpenness) / 2.0;
-    double mouthOpen = _calculateMouthOpenness(landmarkList, mouthIndices);
+    final leftOpenness = _calculateEyeOpenness(landmarkList, leftEyeIndices);
+    final rightOpenness = _calculateEyeOpenness(landmarkList, rightEyeIndices);
+    final average = (leftOpenness + rightOpenness) / 2.0;
+    final mouthOpen = _calculateMouthOpenness(landmarkList, mouthIndices);
 
     setState(() {
       _averageEyeOpenness = average;
       _mouthOpenness = mouthOpen;
     });
 
+    // Drowsiness detection
     const double eyeThreshold = 0.12;
     if (average < eyeThreshold) {
       if (_eyesClosedSince == null) {
@@ -113,6 +131,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
       }
     }
 
+    // Yawning detection
     const double mouthThreshold = 0.465;
     if (mouthOpen > mouthThreshold) {
       if (!_isYawning) {
@@ -131,24 +150,24 @@ class _MonitoringPageState extends State<MonitoringPage> {
   }
 
   double _calculateEyeOpenness(NormalizedLandmarkList landmarks, List<int> indices) {
-    if (landmarks.landmark.length <= indices.reduce(math.max)) return 1.0;
     final upper = landmarks.landmark[indices[0]];
     final lower = landmarks.landmark[indices[1]];
     final left = landmarks.landmark[indices[2]];
     final right = landmarks.landmark[indices[3]];
-    double vertical = (upper.y - lower.y).abs();
-    double horizontal = (left.x - right.x).abs();
+
+    final vertical = (upper.y - lower.y).abs();
+    final horizontal = (left.x - right.x).abs();
     return horizontal == 0 ? 1.0 : vertical / horizontal;
   }
 
   double _calculateMouthOpenness(NormalizedLandmarkList landmarks, List<int> indices) {
-    if (landmarks.landmark.length <= indices.reduce(math.max)) return 0.0;
     final upperLip = landmarks.landmark[indices[0]];
     final lowerLip = landmarks.landmark[indices[1]];
     final leftCorner = landmarks.landmark[indices[2]];
     final rightCorner = landmarks.landmark[indices[3]];
-    double vertical = (upperLip.y - lowerLip.y).abs();
-    double horizontal = (leftCorner.x - rightCorner.x).abs();
+
+    final vertical = (upperLip.y - lowerLip.y).abs();
+    final horizontal = (leftCorner.x - rightCorner.x).abs();
     return horizontal == 0 ? 0.0 : vertical / horizontal;
   }
 
@@ -164,13 +183,6 @@ class _MonitoringPageState extends State<MonitoringPage> {
   void toggleAnalyzing() {
     setState(() {
       _isAnalyzing = !_isAnalyzing;
-      if (_isAnalyzing) {
-        print("📷 Starting distraction detection...");
-        _distractionDetector?.startDetection();
-      } else {
-        print("🛑 Stopping detection...");
-        _distractionDetector?.stopDetection();
-      }
     });
   }
 
@@ -185,57 +197,49 @@ class _MonitoringPageState extends State<MonitoringPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Navigation
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                // Top bar
+                Stack(
+                  alignment: Alignment.center,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.black),
-                      onPressed: () => Navigator.pop(context),
-                    ),
+                    // Centered title
                     const Text(
                       'Real-time Monitoring',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 18.0,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.settings, color: Colors.black),
-                      onPressed: () {},
+
+                    // Back button on the left
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: () => Navigator.pop(context),
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20.0),
+                const SizedBox(height: 20),
                 const Center(
-                  child: Text(
-                    "Driver's View",
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 16.0,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  child: Text("Driver's View", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
-                const SizedBox(height: 10.0),
+                const SizedBox(height: 10),
                 Center(
                   child: Stack(
                     children: [
                       Container(
-                        height: 500.0,
-                        width: 300.0,
+                        height: 500,
+                        width: 300,
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12.0),
+                          borderRadius: BorderRadius.circular(12),
                           color: Colors.black,
                         ),
                         child: _isAnalyzing
                             ? NativeView(
                           onViewCreated: (FlutterMediapipe controller) {
                             controller.landMarksStream.listen(_onLandmarkStream);
+                            _listenToFrameStream(); // ✅ now called when NativeView is ready!
                           },
                         )
-                            : const Center(
+                          : const Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -252,19 +256,18 @@ class _MonitoringPageState extends State<MonitoringPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 10.0),
+                const SizedBox(height: 10),
                 Center(
-                  child: ElevatedButton(
-                    onPressed: _isReady ? toggleAnalyzing : null,
-                    child: Text(_isAnalyzing ? 'Stop Analyzing' : 'Start Analyzing'),
+                  child:
+                      ElevatedButton(
+                        onPressed: toggleAnalyzing,
+                        child: Text(_isAnalyzing ? 'Stop Analyzing' : 'Start Analyzing'),
+                      ),
                   ),
-                ),
-                const SizedBox(height: 20.0),
-                const Text(
-                  "Driver's Status",
-                  style: TextStyle(color: Colors.black, fontSize: 16.0, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10.0),
+
+                const SizedBox(height: 20),
+                const Text("Driver's Status", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
@@ -273,16 +276,14 @@ class _MonitoringPageState extends State<MonitoringPage> {
                     _statusIndicator('Distraction', Colors.purple, _isDistracted ? 0.8 : 0.2),
                   ],
                 ),
-                const SizedBox(height: 20.0),
-                const Text('Recent Alerts', style: TextStyle(color: Colors.black, fontSize: 16.0, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10.0),
+                const SizedBox(height: 20),
+                const Text('Recent Alerts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 10),
                 ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _recentAlerts.length,
-                  itemBuilder: (context, index) {
-                    return _alertTile(_recentAlerts[index], 'Just now');
-                  },
+                  itemBuilder: (context, index) => _alertTile(_recentAlerts[index], 'Just now'),
                 ),
               ],
             ),
@@ -299,54 +300,48 @@ class _MonitoringPageState extends State<MonitoringPage> {
           alignment: Alignment.center,
           children: [
             SizedBox(
-              width: 60.0,
-              height: 60.0,
+              width: 60,
+              height: 60,
               child: CircularProgressIndicator(
                 value: confidence.clamp(0.0, 1.0),
-                strokeWidth: 5.0,
+                strokeWidth: 5,
                 valueColor: AlwaysStoppedAnimation<Color>(color),
                 backgroundColor: Colors.grey[300],
               ),
             ),
             Container(
-              width: 30.0,
-              height: 30.0,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: confidence > 0.2 ? color : Colors.grey,
-              ),
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: confidence > 0.2 ? color : Colors.grey),
             ),
           ],
         ),
-        const SizedBox(height: 5.0),
-        Text(label, style: const TextStyle(color: Colors.black, fontSize: 12.0)),
-        Text("${(confidence * 100).toStringAsFixed(0)}%", style: const TextStyle(fontSize: 10.0, color: Colors.grey)),
+        const SizedBox(height: 5),
+        Text(label, style: const TextStyle(fontSize: 12)),
+        Text("${(confidence * 100).toStringAsFixed(0)}%", style: const TextStyle(fontSize: 10, color: Colors.grey)),
       ],
     );
   }
 
-  Widget _warningOverlay(String message, Color bgColor, double top) {
+  Widget _warningOverlay(String message, Color color, double top) {
     return Positioned(
       top: top,
       left: 10,
       child: Container(
-        padding: const EdgeInsets.all(8.0),
-        color: bgColor.withOpacity(0.8),
-        child: Text(
-          message,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
+        padding: const EdgeInsets.all(8),
+        color: color.withOpacity(0.8),
+        child: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
   Widget _alertTile(String alert, String time) {
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 0.0),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 0),
       leading: const Icon(Icons.warning, color: Colors.redAccent),
-      title: Text(alert, style: const TextStyle(color: Colors.black, fontSize: 14.0)),
-      subtitle: Text(time, style: const TextStyle(color: Colors.grey, fontSize: 12.0)),
-      trailing: const Text('Clear', style: TextStyle(color: Colors.blueAccent, fontSize: 12.0)),
+      title: Text(alert),
+      subtitle: Text(time, style: const TextStyle(color: Colors.grey)),
+      trailing: const Text('Clear', style: TextStyle(color: Colors.blueAccent, fontSize: 12)),
     );
   }
 }
