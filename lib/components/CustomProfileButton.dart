@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-class CustomSettingButton extends StatelessWidget {
+class CustomProfileButton extends StatelessWidget {
   final VoidCallback onPressed;
 
-  const CustomSettingButton({super.key, required this.onPressed});
+  const CustomProfileButton({super.key, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {

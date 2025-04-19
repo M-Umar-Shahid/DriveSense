@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class ProfilePage extends StatelessWidget {
@@ -5,27 +6,30 @@ class ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final String name = user?.displayName ?? "No Name";
+    final String email = user?.email ?? "No Email";
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF4F6FC),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Back Button and Title
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20),
               child: Row(
                 children: [
                   IconButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
+                    onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.arrow_back, size: 28.0, color: Colors.black54),
                   ),
                   const SizedBox(width: 10.0),
                   const Text(
                     "Profile",
                     style: TextStyle(
+                      fontFamily: 'Poppins',
                       fontSize: 22.0,
                       fontWeight: FontWeight.bold,
                       color: Colors.black,
@@ -35,15 +39,13 @@ class ProfilePage extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: 20.0),
-
             // Profile Section
             Center(
               child: Column(
                 children: [
                   Stack(
                     children: [
-                      CircleAvatar(
+                      const CircleAvatar(
                         radius: 60.0,
                         backgroundImage: AssetImage('assets/images/profile.png'),
                       ),
@@ -61,18 +63,20 @@ class ProfilePage extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 10.0),
-                  const Text(
-                    "Neha Malik",
-                    style: TextStyle(
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontFamily: 'Poppins',
                       fontSize: 18.0,
                       fontWeight: FontWeight.bold,
                       color: Colors.black87,
                     ),
                   ),
                   const SizedBox(height: 5.0),
-                  const Text(
-                    "nehamalik@gmail.com",
-                    style: TextStyle(
+                  Text(
+                    email,
+                    style: const TextStyle(
+                      fontFamily: 'Poppins',
                       fontSize: 14.0,
                       color: Colors.grey,
                     ),
@@ -87,11 +91,16 @@ class ProfilePage extends StatelessWidget {
             Expanded(
               child: ListView(
                 children: [
-                  _settingsItem(title: "Setting"),
-                  _settingsItem(title: "Setting"),
-                  _settingsItem(title: "Setting"),
-                  _settingsItem(title: "Setting"),
-                  _settingsItem(title: "Setting"),
+                  _settingsItem(title: "Edit Profile", icon: Icons.person, onTap: () {}),
+                  _settingsItem(title: "Change Password", icon: Icons.lock, onTap: () {}),
+                  _settingsItem(title: "Notification Settings", icon: Icons.notifications, onTap: () {}),
+                  _settingsItem(title: "App Preferences", icon: Icons.settings, onTap: () {}),
+                  _settingsItem(title: "Logout", icon: Icons.logout, color: Colors.red, onTap: () async {
+                    await FirebaseAuth.instance.signOut();
+                    if (context.mounted) {
+                      Navigator.popUntil(context, (route) => route.isFirst);
+                    }
+                  }),
                 ],
               ),
             ),
@@ -101,31 +110,40 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  // Settings Item Widget
-  Widget _settingsItem({required String title}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.grey, width: 0.2)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.settings, color: Colors.grey),
-              const SizedBox(width: 10.0),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16.0,
-                  color: Colors.black87,
+  Widget _settingsItem({
+    required String title,
+    required IconData icon,
+    required VoidCallback onTap,
+    Color color = Colors.black87,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: Colors.grey, width: 0.2)),
+          color: Colors.white,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color),
+                const SizedBox(width: 10.0),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 16.0,
+                    color: color,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const Icon(Icons.chevron_right, color: Colors.grey),
-        ],
+              ],
+            ),
+            const Icon(Icons.chevron_right, color: Colors.grey),
+          ],
+        ),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,7 +6,6 @@ import 'package:flutter_mediapipe/flutter_mediapipe.dart';
 import 'package:flutter_mediapipe/gen/landmark.pb.dart';
 import 'package:image/image.dart' as img;
 import '../utils/distraction_detector.dart';
-
 
 class MonitoringPage extends StatefulWidget {
   const MonitoringPage({Key? key}) : super(key: key);
@@ -27,8 +27,10 @@ class _MonitoringPageState extends State<MonitoringPage> {
   DateTime? _eyesClosedSince;
   final List<String> _recentAlerts = [];
   final DistractionDetector _distractionDetector = DistractionDetector();
-  static const EventChannel _frameStream = EventChannel("flutter_mediapipe/frameStream");
 
+  FlutterMediapipe? _mpController;
+  static const EventChannel _frameStream = EventChannel("flutter_mediapipe/frameStream");
+  StreamSubscription? _frameSubscription;
 
   final List<int> leftEyeIndices = [159, 145, 33, 133];
   final List<int> rightEyeIndices = [386, 374, 362, 263];
@@ -53,29 +55,31 @@ class _MonitoringPageState extends State<MonitoringPage> {
     _initDistractionModel();
   }
 
+  @override
+  void dispose() {
+    _frameSubscription?.cancel();
+    _mpController = null;
+    super.dispose();
+  }
+
   Future<void> _initDistractionModel() async {
     await _distractionDetector.loadModel();
-    print("✅ Distraction model loaded");
+    debugPrint("✅ Distraction model loaded");
   }
 
   void _listenToFrameStream() {
-    print("👂 Listening to frame stream...");
-    _frameStream.receiveBroadcastStream().listen(
+    _frameSubscription = _frameStream.receiveBroadcastStream().listen(
           (event) {
-        print("📸 Frame received in Dart!");
+        if (!_isAnalyzing) return;
+
         if (event is Uint8List) {
           final image = img.decodeImage(event);
           if (image != null) {
-            print("🧠 Decoded image — running model...");
             final input = _distractionDetector.preprocessImage(image);
             final output = _distractionDetector.run(input);
-
             final int predictedClass =
             output.indexWhere((e) => e == output.reduce((a, b) => a > b ? a : b));
             final bool isDistracted = predictedClass != 0;
-
-            print("🚨 Prediction: $predictedClass → ${isDistracted ? "Distracted" : "Safe"}");
-            print("📊 Output scores: ${output.map((v) => v.toStringAsFixed(3)).toList()}");
 
             setState(() {
               _isDistracted = isDistracted;
@@ -84,24 +88,20 @@ class _MonitoringPageState extends State<MonitoringPage> {
                 _addRecentAlert("Distraction: $_distractionLabel");
               }
             });
-          } else {
-            print("❌ Failed to decode image from bytes");
           }
-        } else {
-          print("❌ Event is not a Uint8List");
         }
       },
-      onError: (error) {
-        print("❌ Error in frame stream: $error");
-      },
+      onError: (error) => debugPrint("❌ Frame stream error: $error"),
       cancelOnError: true,
     );
   }
 
   void _onLandmarkStream(NormalizedLandmarkList landmarkList) {
-    final leftOpenness = _calculateEyeOpenness(landmarkList, leftEyeIndices);
-    final rightOpenness = _calculateEyeOpenness(landmarkList, rightEyeIndices);
-    final average = (leftOpenness + rightOpenness) / 2.0;
+    if (!_isAnalyzing) return;
+
+    final left = _calculateEyeOpenness(landmarkList, leftEyeIndices);
+    final right = _calculateEyeOpenness(landmarkList, rightEyeIndices);
+    final average = (left + right) / 2;
     final mouthOpen = _calculateMouthOpenness(landmarkList, mouthIndices);
 
     setState(() {
@@ -109,12 +109,10 @@ class _MonitoringPageState extends State<MonitoringPage> {
       _mouthOpenness = mouthOpen;
     });
 
-    // Drowsiness detection
-    const double eyeThreshold = 0.12;
+    const eyeThreshold = 0.12;
     if (average < eyeThreshold) {
-      if (_eyesClosedSince == null) {
-        _eyesClosedSince = DateTime.now();
-      } else if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(seconds: 1)) {
+      _eyesClosedSince ??= DateTime.now();
+      if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(seconds: 1)) {
         if (!_isDrowsy) {
           setState(() {
             _isDrowsy = true;
@@ -125,14 +123,11 @@ class _MonitoringPageState extends State<MonitoringPage> {
     } else {
       _eyesClosedSince = null;
       if (_isDrowsy) {
-        setState(() {
-          _isDrowsy = false;
-        });
+        setState(() => _isDrowsy = false);
       }
     }
 
-    // Yawning detection
-    const double mouthThreshold = 0.465;
+    const mouthThreshold = 0.465;
     if (mouthOpen > mouthThreshold) {
       if (!_isYawning) {
         setState(() {
@@ -142,48 +137,96 @@ class _MonitoringPageState extends State<MonitoringPage> {
       }
     } else {
       if (_isYawning) {
-        setState(() {
-          _isYawning = false;
-        });
+        setState(() => _isYawning = false);
       }
     }
   }
 
-  double _calculateEyeOpenness(NormalizedLandmarkList landmarks, List<int> indices) {
-    final upper = landmarks.landmark[indices[0]];
-    final lower = landmarks.landmark[indices[1]];
-    final left = landmarks.landmark[indices[2]];
-    final right = landmarks.landmark[indices[3]];
-
+  double _calculateEyeOpenness(NormalizedLandmarkList l, List<int> i) {
+    final upper = l.landmark[i[0]];
+    final lower = l.landmark[i[1]];
+    final left = l.landmark[i[2]];
+    final right = l.landmark[i[3]];
     final vertical = (upper.y - lower.y).abs();
     final horizontal = (left.x - right.x).abs();
     return horizontal == 0 ? 1.0 : vertical / horizontal;
   }
 
-  double _calculateMouthOpenness(NormalizedLandmarkList landmarks, List<int> indices) {
-    final upperLip = landmarks.landmark[indices[0]];
-    final lowerLip = landmarks.landmark[indices[1]];
-    final leftCorner = landmarks.landmark[indices[2]];
-    final rightCorner = landmarks.landmark[indices[3]];
-
-    final vertical = (upperLip.y - lowerLip.y).abs();
-    final horizontal = (leftCorner.x - rightCorner.x).abs();
+  double _calculateMouthOpenness(NormalizedLandmarkList l, List<int> i) {
+    final upper = l.landmark[i[0]];
+    final lower = l.landmark[i[1]];
+    final left = l.landmark[i[2]];
+    final right = l.landmark[i[3]];
+    final vertical = (upper.y - lower.y).abs();
+    final horizontal = (left.x - right.x).abs();
     return horizontal == 0 ? 0.0 : vertical / horizontal;
   }
 
   void _addRecentAlert(String alert) {
     if (!_recentAlerts.contains(alert)) {
       _recentAlerts.add(alert);
-      if (_recentAlerts.length > 5) {
-        _recentAlerts.removeAt(0);
-      }
+      if (_recentAlerts.length > 5) _recentAlerts.removeAt(0);
     }
   }
 
   void toggleAnalyzing() {
     setState(() {
       _isAnalyzing = !_isAnalyzing;
+
+      if (_isAnalyzing) {
+        debugPrint("▶️ Start analyzing");
+      } else {
+        debugPrint("⏹️ Stop analyzing");
+        _frameSubscription?.cancel();
+        _frameSubscription = null;
+        _mpController = null;
+      }
     });
+  }
+
+  Widget _buildCameraView() {
+    return Center(
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Opacity(
+            opacity: _isAnalyzing ? 1.0 : 0.0,
+            child: SizedBox(
+              height: 500,
+              width: 300,
+              child: NativeView(
+                onViewCreated: (FlutterMediapipe controller) {
+                  _mpController = controller;
+                  controller.landMarksStream.listen((landmarks) {
+                    if (_isAnalyzing) _onLandmarkStream(landmarks);
+                  });
+                  _listenToFrameStream();
+                },
+              ),
+            ),
+          ),
+          if (!_isAnalyzing)
+            Container(
+              height: 500,
+              width: 300,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.black,
+              ),
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.camera_alt, color: Colors.grey, size: 100),
+                    SizedBox(height: 10),
+                    Text('Camera not active', style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -197,17 +240,13 @@ class _MonitoringPageState extends State<MonitoringPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top bar
                 Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Centered title
                     const Text(
                       'Real-time Monitoring',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                     ),
-
-                    // Back button on the left
                     Align(
                       alignment: Alignment.centerLeft,
                       child: IconButton(
@@ -222,49 +261,14 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   child: Text("Driver's View", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(height: 10),
-                Center(
-                  child: Stack(
-                    children: [
-                      Container(
-                        height: 500,
-                        width: 300,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          color: Colors.black,
-                        ),
-                        child: _isAnalyzing
-                            ? NativeView(
-                          onViewCreated: (FlutterMediapipe controller) {
-                            controller.landMarksStream.listen(_onLandmarkStream);
-                            _listenToFrameStream(); // ✅ now called when NativeView is ready!
-                          },
-                        )
-                          : const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.camera_alt, color: Colors.grey, size: 100),
-                              SizedBox(height: 10),
-                              Text('Camera not active', style: TextStyle(color: Colors.white)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      if (_isDrowsy) _warningOverlay("WARNING: Driver Drowsy!", Colors.red, 10),
-                      if (_isYawning) _warningOverlay("WARNING: Yawning detected!", Colors.orange, 50),
-                      if (_isDistracted) _warningOverlay("WARNING: $_distractionLabel", Colors.purple, 90),
-                    ],
-                  ),
-                ),
+                _buildCameraView(),
                 const SizedBox(height: 10),
                 Center(
-                  child:
-                      ElevatedButton(
-                        onPressed: toggleAnalyzing,
-                        child: Text(_isAnalyzing ? 'Stop Analyzing' : 'Start Analyzing'),
-                      ),
+                  child: ElevatedButton(
+                    onPressed: toggleAnalyzing,
+                    child: Text(_isAnalyzing ? 'Stop Analyzing' : 'Start Analyzing'),
                   ),
-
+                ),
                 const SizedBox(height: 20),
                 const Text("Driver's Status", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 10),
@@ -312,7 +316,10 @@ class _MonitoringPageState extends State<MonitoringPage> {
             Container(
               width: 30,
               height: 30,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: confidence > 0.2 ? color : Colors.grey),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: confidence > 0.2 ? color : Colors.grey,
+              ),
             ),
           ],
         ),
@@ -320,18 +327,6 @@ class _MonitoringPageState extends State<MonitoringPage> {
         Text(label, style: const TextStyle(fontSize: 12)),
         Text("${(confidence * 100).toStringAsFixed(0)}%", style: const TextStyle(fontSize: 10, color: Colors.grey)),
       ],
-    );
-  }
-
-  Widget _warningOverlay(String message, Color color, double top) {
-    return Positioned(
-      top: top,
-      left: 10,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        color: color.withOpacity(0.8),
-        child: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      ),
     );
   }
 
