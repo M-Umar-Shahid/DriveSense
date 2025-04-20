@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:drivesense/pages/dashboard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_mediapipe/flutter_mediapipe.dart';
@@ -22,6 +23,10 @@ class _MonitoringPageState extends State<MonitoringPage> {
   bool _isAnalyzing = false;
   bool _isDrowsy = false;
   bool _isYawning = false;
+  DocumentReference? _currentTripRef;
+  int _tripAlertCount = 0;
+  DateTime? _tripStartTime;
+  String _tripFinalStatus = 'Safe'; // Initially safe
   bool _isDistracted = false;
   img.Image? _lastFrameImage;
   double _averageEyeOpenness = 1.0;
@@ -92,11 +97,18 @@ class _MonitoringPageState extends State<MonitoringPage> {
     // Save alert metadata to Firestore
     await FirebaseFirestore.instance.collection("detections").add({
       "uid": user.uid,
-      "alertType": alertType,              // e.g. "Reaching Behind"
-      "alertCategory": _getAlertCategory(alertType), // NEW
+      "alertType": alertType,
+      "alertCategory": _getAlertCategory(alertType),
       "imageUrl": imageUrl,
       "timestamp": Timestamp.fromDate(timestamp),
     });
+
+// 🔄 Update trip alert count
+    if (_currentTripRef != null) {
+      _tripAlertCount++;
+      _tripFinalStatus = _getAlertCategory(alertType) == 'Distraction' ? 'Distracted' : _tripFinalStatus;
+    }
+
 
 
     debugPrint("📸 Snapshot saved: $imageUrl");
@@ -246,20 +258,49 @@ class _MonitoringPageState extends State<MonitoringPage> {
     }
   }
 
-  void toggleAnalyzing() {
+  Future<void> toggleAnalyzing() async {
     setState(() {
       _isAnalyzing = !_isAnalyzing;
-
-      if (_isAnalyzing) {
-        debugPrint("▶️ Start analyzing");
-      } else {
-        debugPrint("⏹️ Stop analyzing");
-        _frameSubscription?.cancel();
-        _frameSubscription = null;
-        _mpController = null;
-      }
     });
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    if (_isAnalyzing) {
+      debugPrint("▶️ Start analyzing");
+
+      // 🚀 Start new trip
+      _tripAlertCount = 0;
+      _tripFinalStatus = 'Safe';
+      _tripStartTime = DateTime.now();
+      _currentTripRef = await FirebaseFirestore.instance.collection('trips').add({
+        'uid': user.uid,
+        'startTime': Timestamp.fromDate(_tripStartTime!),
+        'alerts': 0,
+        'status': 'Safe',
+      });
+
+      _listenToFrameStream();
+    } else {
+      debugPrint("⏹️ Stop analyzing");
+
+      _frameSubscription?.cancel();
+      _frameSubscription = null;
+      _mpController = null;
+
+      // ✅ End the trip
+      if (_currentTripRef != null && _tripStartTime != null) {
+        await _currentTripRef!.update({
+          'endTime': Timestamp.now(),
+          'alerts': _tripAlertCount,
+          'status': _tripFinalStatus,
+        });
+      }
+
+      _currentTripRef = null;
+    }
   }
+
 
   Widget _buildCameraView() {
     return Center(
@@ -308,7 +349,12 @@ class _MonitoringPageState extends State<MonitoringPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return WillPopScope(
+        onWillPop: () async {
+          if (_isAnalyzing) toggleAnalyzing();
+          return true;
+        },
+    child:  Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
@@ -328,7 +374,16 @@ class _MonitoringPageState extends State<MonitoringPage> {
                       alignment: Alignment.centerLeft,
                       child: IconButton(
                         icon: const Icon(Icons.arrow_back),
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () async {
+                          if (_isAnalyzing) await toggleAnalyzing();  // Await it first
+                          if (mounted) {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (context) => const Dashboard()),
+                            );
+                          }
+                          // Only pop after cleanup
+                        },
                       ),
                     ),
                   ],
@@ -371,7 +426,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
           ),
         ),
       ),
-    );
+    ),);
   }
 
   Widget _statusIndicator(String label, Color color, double confidence) {

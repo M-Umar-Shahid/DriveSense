@@ -4,6 +4,9 @@ import 'package:drivesense/pages/profile_page.dart';
 import 'package:drivesense/pages/image_alerts_page.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'main.dart';
+
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -12,18 +15,73 @@ class Dashboard extends StatefulWidget {
   State<Dashboard> createState() => _DashboardState();
 }
 
-class _DashboardState extends State<Dashboard> {
+class _DashboardState extends State<Dashboard> with RouteAware{
   String _username = "";
+  int _alertCount = 0;
+  int _tripCount = 0;
+  double _focusPercentage = 0.0;
 
   @override
   void initState() {
     super.initState();
+    _fetchUserInfo();
+    _fetchDashboardData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // This is triggered when coming back to this page from another
+    _fetchDashboardData();
+  }
+
+
+  void _fetchUserInfo() {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       setState(() {
         _username = user.displayName ?? user.email?.split('@').first ?? "User";
       });
     }
+  }
+
+  Future<void> _fetchDashboardData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final alertsSnap = await FirebaseFirestore.instance
+        .collection('detections')
+        .where('uid', isEqualTo: user.uid)
+        .get();
+
+    final tripsSnap = await FirebaseFirestore.instance
+        .collection('trips')
+        .where('uid', isEqualTo: user.uid)
+        .get();
+
+    int safeTrips = 0;
+    for (var trip in tripsSnap.docs) {
+      if ((trip.data()['status'] ?? '') == 'Safe') safeTrips++;
+    }
+
+    setState(() {
+      _alertCount = alertsSnap.size;
+      _tripCount = tripsSnap.size;
+      _focusPercentage = tripsSnap.size > 0
+          ? (safeTrips / tripsSnap.size * 100)
+          : 0.0;
+    });
   }
 
   @override
@@ -126,9 +184,9 @@ class _DashboardState extends State<Dashboard> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _summaryBox("Alerts", "5", Icons.warning_amber_rounded, Colors.redAccent),
-                          _summaryBox("Trips", "12", Icons.route, Colors.green),
-                          _summaryBox("Focus", "92%", Icons.remove_red_eye, Colors.blue),
+                          _summaryBox("Alerts", "$_alertCount", Icons.warning_amber_rounded, Colors.redAccent),
+                          _summaryBox("Trips", "$_tripCount", Icons.route, Colors.green),
+                          _summaryBox("Focus", "${_focusPercentage.toStringAsFixed(0)}%", Icons.remove_red_eye, Colors.blue),
                         ],
                       )
                     ],
@@ -206,20 +264,54 @@ class _DashboardState extends State<Dashboard> {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: Column(
-                  children: [
-                    _tripCard(tripNo: "1", start: "8:20 AM", end: "9:05 AM", alerts: 1, status: "Safe"),
-                    _tripCard(tripNo: "2", start: "10:00 AM", end: "10:45 AM", alerts: 3, status: "Distracted"),
-                    _tripCard(tripNo: "3", start: "2:30 PM", end: "3:15 PM", alerts: 0, status: "Safe"),
-                  ],
+                child: FutureBuilder<QuerySnapshot>(
+                  future: FirebaseFirestore.instance
+                      .collection('trips')
+                      .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                      .orderBy('endTime', descending: true)
+                      .limit(3)
+                      .get(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const CircularProgressIndicator();
+                    }
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return const Text("No trips found");
+                    }
+
+                    final trips = snapshot.data!.docs;
+
+                    return Column(
+                      children: trips.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final trip = entry.value;
+                        final start = (trip['startTime'] as Timestamp).toDate();
+                        final end = (trip['endTime'] as Timestamp).toDate();
+                        final alerts = trip['alerts'] ?? 0;
+                        final status = trip['status'] ?? "Unknown";
+
+                        return _tripCard(
+                          tripNo: "${index + 1}",
+                          start: _formatTime(start),
+                          end: _formatTime(end),
+                          alerts: alerts,
+                          status: status,
+                        );
+                      }).toList(),
+                    );
+                  },
                 ),
-              )
+              ),
             ],
           ),
         ),
       ),
     );
   }
+  String _formatTime(DateTime dt) {
+    return "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
+  }
+
 
   static Widget _summaryBox(String title, String value, IconData icon, Color iconColor) {
     return Column(
