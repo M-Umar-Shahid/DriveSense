@@ -326,16 +326,36 @@ public class NativeView implements PlatformView, MethodCallHandler {
         };
     }
     private void captureAndSendFrame() {
-        Bitmap bitmap = Bitmap.createBitmap(previewDisplayView.getWidth(), previewDisplayView.getHeight(), Bitmap.Config.ARGB_8888);
-        PixelCopy.request(previewDisplayView, bitmap, copyResult -> {
-            if (copyResult == PixelCopy.SUCCESS) {
-                Log.d(TAG, "✅ PixelCopy success, sending frame...");
-                sendFrameToFlutter(bitmap);
-            } else {
-                Log.e(TAG, "❌ PixelCopy failed: " + copyResult);
-            }
-        }, handler);
+        if (previewDisplayView == null || !previewDisplayView.isAttachedToWindow()) {
+            Log.w(TAG, "⚠️ SurfaceView is not attached. Skipping PixelCopy.");
+            return;
+        }
+
+        if (previewDisplayView.getWidth() == 0 || previewDisplayView.getHeight() == 0) {
+            Log.w(TAG, "⚠️ SurfaceView size is 0. Skipping PixelCopy.");
+            return;
+        }
+
+        Bitmap bitmap = Bitmap.createBitmap(
+                previewDisplayView.getWidth(),
+                previewDisplayView.getHeight(),
+                Bitmap.Config.ARGB_8888
+        );
+
+        try {
+            PixelCopy.request(previewDisplayView, bitmap, copyResult -> {
+                if (copyResult == PixelCopy.SUCCESS) {
+                    Log.d(TAG, "✅ PixelCopy success, sending frame...");
+                    sendFrameToFlutter(bitmap);
+                } else {
+                    Log.e(TAG, "❌ PixelCopy failed: " + copyResult);
+                }
+            }, handler);
+        } catch (IllegalArgumentException e) {
+            Log.e(TAG, "❌ PixelCopy crashed: Surface is invalid", e);
+        }
     }
+
 
     private void sendFrameToFlutter(Bitmap bitmap) {
         if (frameSink == null || bitmap == null) return;

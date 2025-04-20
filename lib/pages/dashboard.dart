@@ -1,7 +1,7 @@
 import 'package:drivesense/pages/analytics_page.dart';
 import 'package:drivesense/pages/monitoring_screen.dart';
 import 'package:drivesense/pages/profile_page.dart';
-import 'package:drivesense/pages/video_alerts_page.dart';
+import 'package:drivesense/pages/image_alerts_page.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -107,8 +107,8 @@ class _DashboardState extends State<Dashboard> {
                   ),
                   child: Column(
                     children: [
-                      Row(
-                        children: const [
+                      const Row(
+                        children: [
                           Icon(Icons.analytics, color: Colors.deepPurple),
                           SizedBox(width: 8),
                           Text(
@@ -173,17 +173,17 @@ class _DashboardState extends State<Dashboard> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => VideoAlertsPage()),
+                    MaterialPageRoute(builder: (context) => const ImageAlertsPage()),
                   );
                 },
               ),
 
               // Recent Trips
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 25, 20, 8),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 25, 20, 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: const [
+                  children: [
                     Text(
                       'Recent Trips',
                       style: TextStyle(

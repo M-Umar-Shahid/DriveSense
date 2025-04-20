@@ -1,6 +1,6 @@
 // import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 // import 'package:drivesense/pages/profile_page.dart';
-// import 'package:drivesense/pages/video_alerts_page.dart';
+// import 'package:drivesense/pages/image_alerts_page.dart';
 // import 'package:flutter/material.dart';
 // import 'dashboard.dart';
 //

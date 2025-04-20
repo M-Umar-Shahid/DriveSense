@@ -92,13 +92,35 @@ class _MonitoringPageState extends State<MonitoringPage> {
     // Save alert metadata to Firestore
     await FirebaseFirestore.instance.collection("detections").add({
       "uid": user.uid,
-      "alertType": alertType,
+      "alertType": alertType,              // e.g. "Reaching Behind"
+      "alertCategory": _getAlertCategory(alertType), // NEW
       "imageUrl": imageUrl,
       "timestamp": Timestamp.fromDate(timestamp),
     });
 
+
     debugPrint("📸 Snapshot saved: $imageUrl");
   }
+
+  String _getAlertCategory(String type) {
+    const distractions = [
+      'Texting Right',
+      'Phone Right',
+      'Texting Left',
+      'Phone Left',
+      'Radio',
+      'Drinking',
+      'Reaching Behind',
+      'Hair/Makeup',
+      'Talking to Passenger',
+    ];
+
+    if (distractions.contains(type)) return 'Distraction';
+    if (type == 'Yawning') return 'Yawning';
+    if (type == 'Drowsy') return 'Drowsy';
+    return 'Other';
+  }
+
 
   bool _canSave(String alertType, {Duration cooldown = const Duration(seconds: 10)}) {
     final now = DateTime.now();
