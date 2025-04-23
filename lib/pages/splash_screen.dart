@@ -1,4 +1,5 @@
 import 'package:drivesense/pages/dashboard.dart';
+import 'package:drivesense/pages/login_signup.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:async';
@@ -46,7 +47,7 @@ class _SplashScreenState extends State<SplashScreen> {
         // Not signed in → Go to login
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const LoginPage()),
+          MaterialPageRoute(builder: (context) => const LoginSignup()),
         );
       }
     } else {

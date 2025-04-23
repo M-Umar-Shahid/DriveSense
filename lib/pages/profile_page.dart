@@ -1,3 +1,4 @@
+import 'package:drivesense/pages/login_signup.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -27,7 +28,7 @@ class _ProfilePageState extends State<ProfilePage> with RouteAware{
   }
 
   Future<void> _loadUserData() async {
-    await FirebaseAuth.instance.currentUser?.reload(); // 🔁 Refresh from server
+    await FirebaseAuth.instance.currentUser?.reload();
     final updatedUser = FirebaseAuth.instance.currentUser;
     setState(() {
       _imageUrl = updatedUser?.photoURL;
@@ -265,7 +266,12 @@ class _ProfilePageState extends State<ProfilePage> with RouteAware{
                               child: const Text("Cancel"),
                             ),
                             TextButton(
-                              onPressed: () => Navigator.pop(context, true),
+                              onPressed: () => Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const LoginSignup(),
+                                ),
+                              ),
                               child: const Text(
                                 "Logout",
                                 style: TextStyle(color: Colors.red),
