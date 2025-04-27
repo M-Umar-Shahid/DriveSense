@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'package:drivesense/pages/dashboard.dart';
+import 'dart:math' as math;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_mediapipe/flutter_mediapipe.dart';
 import 'package:flutter_mediapipe/gen/landmark.pb.dart';
 import 'package:image/image.dart' as img;
-import '../utils/distraction_detector.dart';
-import 'dart:math';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:drivesense/pages/dashboard.dart';
 
 class MonitoringPage extends StatefulWidget {
   const MonitoringPage({Key? key}) : super(key: key);
@@ -19,165 +19,187 @@ class MonitoringPage extends StatefulWidget {
   State<MonitoringPage> createState() => _MonitoringPageState();
 }
 
-class _MonitoringPageState extends State<MonitoringPage> {
+class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObserver{
   bool _isAnalyzing = false;
   bool _isDrowsy = false;
   bool _isYawning = false;
-  DocumentReference? _currentTripRef;
-  int _tripAlertCount = 0;
-  DateTime? _tripStartTime;
-  String _tripFinalStatus = 'Safe'; // Initially safe
-  bool _isDistracted = false;
-  img.Image? _lastFrameImage;
+  bool _noSeatbelt = false;
   double _averageEyeOpenness = 1.0;
   double _mouthOpenness = 0.0;
-  String _distractionLabel = "Safe Driving";
-  Map<String, DateTime> _lastSavedTimes = {};
-  DateTime? _eyesClosedSince;
-  final List<String> _recentAlerts = [];
-  final DistractionDetector _distractionDetector = DistractionDetector();
+  List<Rect> _noSeatbeltBoxes = [];
+  img.Image? _lastFrameImage;
 
   FlutterMediapipe? _mpController;
-  static const EventChannel _frameStream = EventChannel("flutter_mediapipe/frameStream");
+  Interpreter? _seatbeltInterpreter;
   StreamSubscription? _frameSubscription;
+  static const EventChannel _frameStream = EventChannel("flutter_mediapipe/frameStream");
 
   final List<int> leftEyeIndices = [159, 145, 33, 133];
   final List<int> rightEyeIndices = [386, 374, 362, 263];
   final List<int> mouthIndices = [13, 14, 78, 308];
 
-  final List<String> distractionLabels = [
-    "Safe Driving",
-    "Texting Right",
-    "Phone Right",
-    "Texting Left",
-    "Phone Left",
-    "Radio",
-    "Drinking",
-    "Reaching Behind",
-    "Hair/Makeup",
-    "Talking to Passenger",
-  ];
+  DocumentReference? _currentTripRef;
+  int _tripAlertCount = 0;
+  DateTime? _tripStartTime;
+  String _tripFinalStatus = 'Safe';
+  DateTime? _eyesClosedSince;
+  final Map<String, DateTime> _lastSavedTimes = {};
+  final List<String> _recentAlerts = [];
 
   @override
   void initState() {
     super.initState();
-    _initDistractionModel();
+    WidgetsBinding.instance.addObserver(this);
+    _loadSeatbeltModel();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _frameSubscription?.cancel();
     _mpController = null;
+    _seatbeltInterpreter?.close();
     super.dispose();
   }
 
-  Future<void> _initDistractionModel() async {
-    await _distractionDetector.loadModel();
-    debugPrint("✅ Distraction model loaded");
-  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
 
-  Future<void> _saveDetectionSnapshot({
-    required img.Image image,
-    required String alertType,
-  }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final timestamp = DateTime.now();
-    final fileName = "detections/${user.uid}/${timestamp.millisecondsSinceEpoch}_${alertType}_${Random().nextInt(9999)}.jpg";
-
-    // Convert image to JPEG bytes
-    final jpeg = img.encodeJpg(image, quality: 85);
-
-    // Upload to Firebase Storage
-    final ref = FirebaseStorage.instance.ref().child(fileName);
-    final uploadTask = await ref.putData(Uint8List.fromList(jpeg));
-    final imageUrl = await ref.getDownloadURL();
-
-    // Save alert metadata to Firestore
-    await FirebaseFirestore.instance.collection("detections").add({
-      "uid": user.uid,
-      "alertType": alertType,
-      "alertCategory": _getAlertCategory(alertType),
-      "imageUrl": imageUrl,
-      "timestamp": Timestamp.fromDate(timestamp),
-    });
-
-// 🔄 Update trip alert count
-    if (_currentTripRef != null) {
-      _tripAlertCount++;
-      _tripFinalStatus = _getAlertCategory(alertType) == 'Distraction' ? 'Distracted' : _tripFinalStatus;
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      // App went to background (screen turned off or user switched app)
+      if (_isAnalyzing) {
+        debugPrint("⏸ App Paused → Stopping analysis safely...");
+        toggleAnalyzing(); // 👈 STOP analyzing
+      }
     }
-
-
-
-    debugPrint("📸 Snapshot saved: $imageUrl");
-  }
-
-  String _getAlertCategory(String type) {
-    const distractions = [
-      'Texting Right',
-      'Phone Right',
-      'Texting Left',
-      'Phone Left',
-      'Radio',
-      'Drinking',
-      'Reaching Behind',
-      'Hair/Makeup',
-      'Talking to Passenger',
-    ];
-
-    if (distractions.contains(type)) return 'Distraction';
-    if (type == 'Yawning') return 'Yawning';
-    if (type == 'Drowsy') return 'Drowsy';
-    return 'Other';
-  }
-
-
-  bool _canSave(String alertType, {Duration cooldown = const Duration(seconds: 10)}) {
-    final now = DateTime.now();
-    final lastSaved = _lastSavedTimes[alertType];
-    if (lastSaved == null || now.difference(lastSaved) >= cooldown) {
-      _lastSavedTimes[alertType] = now;
-      return true;
+    if (state == AppLifecycleState.resumed) {
+      // App came back
+      debugPrint("▶️ App Resumed");
     }
-    return false;
+  }
+
+  Future<void> _loadSeatbeltModel() async {
+    _seatbeltInterpreter = await Interpreter.fromAsset('assets/models/seatbelt.tflite');
+    debugPrint('✅ Seatbelt model loaded');
+  }
+
+  Future<void> toggleAnalyzing() async {
+    if (!_isAnalyzing) {
+      // Start analyzing
+      setState(() => _isAnalyzing = true);
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      _tripStartTime = DateTime.now();
+      _tripAlertCount = 0;
+      _tripFinalStatus = 'Safe';
+      _currentTripRef = await FirebaseFirestore.instance.collection('trips').add({
+        'uid': user.uid,
+        'startTime': Timestamp.fromDate(_tripStartTime!),
+        'alerts': 0,
+        'status': 'Safe',
+      });
+
+      _listenToFrameStream();
+    } else {
+      // Stop analyzing
+      setState(() => _isAnalyzing = false);
+
+      // Very important: cancel the frame subscription FIRST
+      await _frameSubscription?.cancel();
+      _frameSubscription = null;
+
+      // Also dispose mediapipe controller
+      _mpController = null;
+      _mpController = null;
+
+      if (_currentTripRef != null && _tripStartTime != null) {
+        await _currentTripRef!.update({
+          'endTime': Timestamp.now(),
+          'alerts': _tripAlertCount,
+          'status': _tripFinalStatus,
+        });
+      }
+
+      _currentTripRef = null;
+    }
   }
 
 
   void _listenToFrameStream() {
-    _frameSubscription = _frameStream.receiveBroadcastStream().listen(
-          (event) {
-        if (!_isAnalyzing) return;
-
-        if (event is Uint8List) {
-          final image = img.decodeImage(event);
-          if (image != null) {
-            _lastFrameImage = image;
-            final input = _distractionDetector.preprocessImage(image);
-            final output = _distractionDetector.run(input);
-            final int predictedClass =
-            output.indexWhere((e) => e == output.reduce((a, b) => a > b ? a : b));
-            final bool isDistracted = predictedClass != 0;
-
-            setState(() {
-              _isDistracted = isDistracted;
-              _distractionLabel = distractionLabels[predictedClass];
-              if (isDistracted) {
-                _addRecentAlert("Distraction: $_distractionLabel");
-                _saveDetectionSnapshot(
-                  image: image,
-                  alertType: _distractionLabel,
-                );
-              }
-            });
-          }
+    _frameSubscription = _frameStream.receiveBroadcastStream().listen((event) async {
+      if (!_isAnalyzing) return;
+      if (event is Uint8List) {
+        final image = img.decodeImage(event);
+        if (image != null) {
+          _lastFrameImage = image;
+          await _runSeatbeltDetection(event);
         }
-      },
-      onError: (error) => debugPrint("❌ Frame stream error: $error"),
-      cancelOnError: true,
-    );
+      }
+    });
   }
+
+  Future<void> _runSeatbeltDetection(Uint8List frameBytes) async {
+    if (_seatbeltInterpreter == null) return;
+
+    final input = _preprocessImage(frameBytes);
+    final output = List.generate(1, (_) => List.generate(5, (_) => List.filled(8400, 0.0)));
+
+    _seatbeltInterpreter!.run(input, output);
+
+    print('✅ Seatbelt model inference done. First few output values:');
+    print(output[0][4].take(10).toList());
+
+    bool detectedNoSeatbelt = false;
+    for (int i = 0; i < 8400; i++) {
+      final confidence = output[0][4][i];
+      if (confidence > 0.5) {
+        detectedNoSeatbelt = true;
+        break;
+      }
+    }
+
+    if (detectedNoSeatbelt && _canSave("NoSeatbelt") && _lastFrameImage != null) {
+      setState(() => _noSeatbelt = true);
+      _addRecentAlert("No Seatbelt detected");
+      _saveDetectionSnapshot(image: _lastFrameImage!, alertType: "No Seatbelt");
+    } else {
+      if (_noSeatbelt) setState(() => _noSeatbelt = false);
+    }
+  }
+
+
+  List<List<List<List<double>>>> _preprocessImage(Uint8List imageBytes) {
+    final originalImage = img.decodeImage(imageBytes);
+    if (originalImage == null) throw Exception("Unable to decode image.");
+
+    final resizedImage = img.copyResize(originalImage, width: 640, height: 640);
+
+    List<List<List<List<double>>>> batch = List.generate(
+      1,
+          (_) => List.generate(
+        640,
+            (_) => List.generate(
+          640,
+              (_) => List.filled(3, 0.0),
+        ),
+      ),
+    );
+
+    for (int y = 0; y < 640; y++) {
+      for (int x = 0; x < 640; x++) {
+        final pixel = resizedImage.getPixel(x, y);
+        batch[0][y][x][0] = pixel.getChannel(img.Channel.red).toDouble();    // 🔥 Notice: No divide by 255.0 now
+        batch[0][y][x][1] = pixel.getChannel(img.Channel.green).toDouble();
+        batch[0][y][x][2] = pixel.getChannel(img.Channel.blue).toDouble();
+      }
+    }
+
+    return batch;
+  }
+
 
   void _onLandmarkStream(NormalizedLandmarkList landmarkList) {
     if (!_isAnalyzing) return;
@@ -192,42 +214,28 @@ class _MonitoringPageState extends State<MonitoringPage> {
       _mouthOpenness = mouthOpen;
     });
 
-    const eyeThreshold = 0.12;
-    if (average < eyeThreshold) {
+    if (average < 0.12) {
       _eyesClosedSince ??= DateTime.now();
       if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(seconds: 1)) {
-        if (_canSave("Drowsy")&&!_isDrowsy && _lastFrameImage != null) {
+        if (_canSave("Drowsy") && !_isDrowsy && _lastFrameImage != null) {
           setState(() => _isDrowsy = true);
           _addRecentAlert("Drowsy detected");
-
-          _saveDetectionSnapshot(
-            image: _lastFrameImage!,
-            alertType: "Drowsy",
-          );
+          _saveDetectionSnapshot(image: _lastFrameImage!, alertType: "Drowsy");
         }
       }
     } else {
       _eyesClosedSince = null;
-      if (_isDrowsy) {
-        setState(() => _isDrowsy = false);
-      }
+      if (_isDrowsy) setState(() => _isDrowsy = false);
     }
 
-    const mouthThreshold = 0.465;
-    if (mouthOpen > mouthThreshold) {
-      if (_canSave("Yawning")&&!_isYawning && _lastFrameImage != null) {
+    if (mouthOpen > 0.465) {
+      if (_canSave("Yawning") && !_isYawning && _lastFrameImage != null) {
         setState(() => _isYawning = true);
         _addRecentAlert("Yawning detected");
-
-        _saveDetectionSnapshot(
-          image: _lastFrameImage!,
-          alertType: "Yawning",
-        );
+        _saveDetectionSnapshot(image: _lastFrameImage!, alertType: "Yawning");
       }
     } else {
-      if (_isYawning) {
-        setState(() => _isYawning = false);
-      }
+      if (_isYawning) setState(() => _isYawning = false);
     }
   }
 
@@ -251,56 +259,48 @@ class _MonitoringPageState extends State<MonitoringPage> {
     return horizontal == 0 ? 0.0 : vertical / horizontal;
   }
 
-  void _addRecentAlert(String alert) {
-    if (!_recentAlerts.contains(alert)) {
-      _recentAlerts.add(alert);
-      if (_recentAlerts.length > 5) _recentAlerts.removeAt(0);
+  bool _canSave(String alertType, {Duration cooldown = const Duration(seconds: 10)}) {
+    final now = DateTime.now();
+    final lastSaved = _lastSavedTimes[alertType];
+    if (lastSaved == null || now.difference(lastSaved) >= cooldown) {
+      _lastSavedTimes[alertType] = now;
+      return true;
     }
+    return false;
   }
 
-  Future<void> toggleAnalyzing() async {
-    setState(() {
-      _isAnalyzing = !_isAnalyzing;
-    });
-
+  Future<void> _saveDetectionSnapshot({required img.Image image, required String alertType}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    if (_isAnalyzing) {
-      debugPrint("▶️ Start analyzing");
+    final timestamp = DateTime.now();
+    final fileName = "detections/${user.uid}/${timestamp.millisecondsSinceEpoch}_${alertType}_${math.Random().nextInt(9999)}.jpg";
 
-      // 🚀 Start new trip
-      _tripAlertCount = 0;
-      _tripFinalStatus = 'Safe';
-      _tripStartTime = DateTime.now();
-      _currentTripRef = await FirebaseFirestore.instance.collection('trips').add({
-        'uid': user.uid,
-        'startTime': Timestamp.fromDate(_tripStartTime!),
-        'alerts': 0,
-        'status': 'Safe',
-      });
+    final jpeg = img.encodeJpg(image, quality: 85);
+    final ref = FirebaseStorage.instance.ref().child(fileName);
+    await ref.putData(Uint8List.fromList(jpeg));
+    final imageUrl = await ref.getDownloadURL();
 
-      _listenToFrameStream();
-    } else {
-      debugPrint("⏹️ Stop analyzing");
+    await FirebaseFirestore.instance.collection("detections").add({
+      "uid": user.uid,
+      "alertType": alertType,
+      "alertCategory": alertType,
+      "imageUrl": imageUrl,
+      "timestamp": Timestamp.fromDate(timestamp),
+    });
 
-      _frameSubscription?.cancel();
-      _frameSubscription = null;
-      _mpController = null;
-
-      // ✅ End the trip
-      if (_currentTripRef != null && _tripStartTime != null) {
-        await _currentTripRef!.update({
-          'endTime': Timestamp.now(),
-          'alerts': _tripAlertCount,
-          'status': _tripFinalStatus,
-        });
-      }
-
-      _currentTripRef = null;
+    if (_currentTripRef != null) {
+      _tripAlertCount++;
+      _tripFinalStatus = 'Alert Detected';
     }
   }
 
+  void _addRecentAlert(String alert) {
+    if (!_recentAlerts.contains(alert)) {
+      _recentAlerts.insert(0, alert);
+      if (_recentAlerts.length > 5) _recentAlerts.removeLast();
+    }
+  }
 
   Widget _buildCameraView() {
     return Center(
@@ -313,16 +313,28 @@ class _MonitoringPageState extends State<MonitoringPage> {
               height: 500,
               width: 300,
               child: NativeView(
-                onViewCreated: (FlutterMediapipe controller) {
+                onViewCreated: (controller) {
                   _mpController = controller;
                   controller.landMarksStream.listen((landmarks) {
                     if (_isAnalyzing) _onLandmarkStream(landmarks);
                   });
-                  _listenToFrameStream();
+
+                  // ✅ Delay frame listening slightly to allow camera startup
+                  Future.delayed(const Duration(milliseconds: 500), () {
+                    if (mounted && _isAnalyzing) {
+                      _listenToFrameStream();
+                    }
+                  });
                 },
               ),
             ),
           ),
+          if (_isAnalyzing)
+            Positioned.fill(
+              child: CustomPaint(
+                painter: SeatbeltBoxPainter(_noSeatbeltBoxes),
+              ),
+            ),
           if (!_isAnalyzing)
             Container(
               height: 500,
@@ -347,54 +359,71 @@ class _MonitoringPageState extends State<MonitoringPage> {
     );
   }
 
+
+
+  Widget _statusIndicator(String label, Color color, double confidence) {
+    return Column(
+      children: [
+        SizedBox(
+          width: 60,
+          height: 60,
+          child: CircularProgressIndicator(
+            value: confidence.clamp(0.0, 1.0),
+            strokeWidth: 5,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            backgroundColor: Colors.grey[300],
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(label, style: const TextStyle(fontSize: 12)),
+      ],
+    );
+  }
+
+  Widget _alertTile(String alert) {
+    return ListTile(
+      leading: const Icon(Icons.warning, color: Colors.redAccent),
+      title: Text(alert, style: const TextStyle(fontSize: 14)),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-        onWillPop: () async {
-          if (_isAnalyzing) toggleAnalyzing();
-          return true;
-        },
-    child:  Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
+      onWillPop: () async {
+        if (_isAnalyzing) {
+          await toggleAnalyzing();
+        }
+        return true;
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: SafeArea(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Stack(
-                  alignment: Alignment.center,
+                Row(
                   children: [
-                    const Text(
-                      'Real-time Monitoring',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () async {
+                        if (_isAnalyzing) await toggleAnalyzing();
+                        if (mounted) {
+                          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Dashboard()));
+                        }
+                      },
                     ),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back),
-                        onPressed: () async {
-                          if (_isAnalyzing) await toggleAnalyzing();  // Await it first
-                          if (mounted) {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (context) => const Dashboard()),
-                            );
-                          }
-                          // Only pop after cleanup
-                        },
-                      ),
-                    ),
+                    const Text('Real-time Monitoring', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                   ],
                 ),
                 const SizedBox(height: 20),
-                const Center(
-                  child: Text("Driver's View", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
+                const Center(child: Text("Driver's View", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
                 const SizedBox(height: 10),
                 _buildCameraView(),
-                const SizedBox(height: 10),
+                const SizedBox(height: 20),
                 Center(
                   child: ElevatedButton(
                     onPressed: toggleAnalyzing,
@@ -409,7 +438,7 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   children: [
                     _statusIndicator(_isDrowsy ? 'Drowsy' : 'Awake', _isDrowsy ? Colors.red : Colors.green, _averageEyeOpenness),
                     _statusIndicator('Yawning', Colors.orange, _isYawning ? 0.8 : 0.2),
-                    _statusIndicator('Distraction', Colors.purple, _isDistracted ? 0.8 : 0.2),
+                    _statusIndicator('Seatbelt', _noSeatbelt ? Colors.red : Colors.green, _noSeatbelt ? 0.9 : 0.1),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -419,17 +448,18 @@ class _MonitoringPageState extends State<MonitoringPage> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _recentAlerts.length,
-                  itemBuilder: (context, index) => _alertTile(_recentAlerts[index], 'Just now'),
+                  itemBuilder: (context, index) => _alertTile(_recentAlerts[index]),
                 ),
               ],
             ),
           ),
         ),
       ),
-    ),);
+    );
   }
+}
 
-  Widget _statusIndicator(String label, Color color, double confidence) {
+Widget _statusIndicator(String label, Color color, double confidence) {
     return Column(
       children: [
         Stack(
@@ -470,5 +500,27 @@ class _MonitoringPageState extends State<MonitoringPage> {
       subtitle: Text(time, style: const TextStyle(color: Colors.grey)),
       trailing: const Text('Clear', style: TextStyle(color: Colors.blueAccent, fontSize: 12)),
     );
+  }
+
+
+class SeatbeltBoxPainter extends CustomPainter {
+  final List<Rect> boxes;
+  SeatbeltBoxPainter(this.boxes);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.red.withOpacity(0.6)
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke;
+
+    for (final box in boxes) {
+      canvas.drawRect(box, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant SeatbeltBoxPainter oldDelegate) {
+    return oldDelegate.boxes != boxes;
   }
 }
