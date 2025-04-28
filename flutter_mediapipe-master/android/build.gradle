@@ -37,6 +37,7 @@ dependencies {
     implementation 'com.google.flogger:flogger-system-backend:0.3.1'
     implementation 'com.google.code.findbugs:jsr305:3.0.2'
     implementation 'com.google.guava:guava:27.0.1-android'
+    implementation 'org.tensorflow:tensorflow-lite:2.9.0'
 //    implementation 'com.google.protobuf:protobuf-java:3.11.4'
     implementation 'com.google.protobuf:protobuf-javalite:3.25.5'
     // CameraX core library
