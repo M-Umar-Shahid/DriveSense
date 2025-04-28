@@ -144,31 +144,40 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   Future<void> _runSeatbeltDetection(Uint8List frameBytes) async {
     if (_seatbeltInterpreter == null) return;
 
+    // 1. Preprocess & run inference
     final input = _preprocessImage(frameBytes);
     final output = List.generate(1, (_) => List.generate(5, (_) => List.filled(8400, 0.0)));
-
     _seatbeltInterpreter!.run(input, output);
 
-    print('✅ Seatbelt model inference done. First few output values:');
-    print(output[0][4].take(10).toList());
+    // 2. Pull out the no-seatbelt confidences (8400 values)
+    final noSeatbeltConfs = output[0][4];
 
-    bool detectedNoSeatbelt = false;
-    for (int i = 0; i < 8400; i++) {
-      final confidence = output[0][4][i];
-      if (confidence > 0.5) {
-        detectedNoSeatbelt = true;
-        break;
-      }
-    }
+    // 3. Compute the average confidence
+    double sum = noSeatbeltConfs.fold(0.0, (acc, c) => acc + c);
+    double avgConf = sum / noSeatbeltConfs.length;
 
+    // 4. Compare against your threshold
+    const double seatbeltAvgThreshold = 0.3;  // tune this as needed
+    bool detectedNoSeatbelt = avgConf > seatbeltAvgThreshold;
+
+    // 5. Log it
+    print("➡ Average no-seatbelt conf = ${avgConf.toStringAsFixed(3)} "
+        "(threshold = ${seatbeltAvgThreshold.toStringAsFixed(3)})");
+
+    // 6. Update UI / save snapshot if needed
     if (detectedNoSeatbelt && _canSave("NoSeatbelt") && _lastFrameImage != null) {
       setState(() => _noSeatbelt = true);
-      _addRecentAlert("No Seatbelt detected");
-      _saveDetectionSnapshot(image: _lastFrameImage!, alertType: "No Seatbelt");
+      _addRecentAlert("No Seatbelt (${(avgConf*100).toStringAsFixed(1)}%)");
+      _saveDetectionSnapshot(
+        image: _lastFrameImage!,
+        alertType: "No Seatbelt",
+      );
     } else {
       if (_noSeatbelt) setState(() => _noSeatbelt = false);
     }
   }
+
+
 
 
   List<List<List<List<double>>>> _preprocessImage(Uint8List imageBytes) {
@@ -214,7 +223,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       _mouthOpenness = mouthOpen;
     });
 
-    if (average < 0.12) {
+    if (average < 0.1) {
       _eyesClosedSince ??= DateTime.now();
       if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(seconds: 1)) {
         if (_canSave("Drowsy") && !_isDrowsy && _lastFrameImage != null) {
@@ -228,7 +237,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       if (_isDrowsy) setState(() => _isDrowsy = false);
     }
 
-    if (mouthOpen > 0.465) {
+    if (mouthOpen > 0.4) {
       if (_canSave("Yawning") && !_isYawning && _lastFrameImage != null) {
         setState(() => _isYawning = true);
         _addRecentAlert("Yawning detected");
