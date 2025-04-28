@@ -47,23 +47,9 @@ import io.flutter.plugin.platform.PlatformView;
 import android.graphics.Bitmap;
 import java.io.ByteArrayOutputStream;
 import io.flutter.plugin.common.EventChannel;
-import org.tensorflow.lite.Interpreter;
-
-
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
-import android.content.res.AssetFileDescriptor;
-import org.tensorflow.lite.Interpreter;
 
 
 public class NativeView implements PlatformView, MethodCallHandler {
-
-
-    private Interpreter seatbeltInterpreter;
 
 
     private EventChannel.EventSink frameSink;
@@ -129,27 +115,12 @@ public class NativeView implements PlatformView, MethodCallHandler {
         setupProcess(activity);
         PermissionHelper.checkAndRequestCameraPermissions(activity);
         onResume();
-        loadSeatbeltModel(context);
     }
 
 
-    private void loadSeatbeltModel(Context context) {
-        try {
-            AssetFileDescriptor fileDescriptor = context.getAssets().openFd("seatbelt.tflite");
-            FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
-            FileChannel fileChannel = inputStream.getChannel();
-            long startOffset = fileDescriptor.getStartOffset();
-            long declaredLength = fileDescriptor.getDeclaredLength();
-            MappedByteBuffer model = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
-            seatbeltInterpreter = new Interpreter(model);
-            Log.d(TAG, "✅ Seatbelt model loaded successfully.");
-        } catch (Exception e) {
-            Log.e(TAG, "❌ Failed to load Seatbelt model: " + e.getMessage());
-        }
-    }
 
 
-        NativeView(@NonNull Context context, int id, @Nullable Map<String, Object> creationParams,
+    NativeView(@NonNull Context context, int id, @Nullable Map<String, Object> creationParams,
                BinaryMessenger messenger, Activity activity) {
         this.activity = activity;
         try {
@@ -165,7 +136,6 @@ public class NativeView implements PlatformView, MethodCallHandler {
         setupProcess(activity);
         PermissionHelper.checkAndRequestCameraPermissions(activity);
         onResume();
-        loadSeatbeltModel(context);
     }
 
     private void setupProcess(Activity activity) {
@@ -238,7 +208,7 @@ public class NativeView implements PlatformView, MethodCallHandler {
             @Override
             public void run() {
                 captureAndSendFrame(); // <-- uses PixelCopy
-                handler.postDelayed(this, 100);
+                handler.postDelayed(this, 15000);
             }
         }, 0);
     }
@@ -275,33 +245,13 @@ public class NativeView implements PlatformView, MethodCallHandler {
 
     @Override
     public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
+
         if (call.method.equals("getPlatformVersion")) {
             result.success("Android " + android.os.Build.VERSION.RELEASE);
-
-        } else if (call.method.equals("captureFrame")) {
-            // one-shot PixelCopy capture
-            if (previewDisplayView == null || !previewDisplayView.isAttachedToWindow()) {
-                result.error("NO_SURFACE", "SurfaceView not ready", null);
-                return;
-            }
-            final Bitmap bmp = Bitmap.createBitmap(
-                    previewDisplayView.getWidth(),
-                    previewDisplayView.getHeight(),
-                    Bitmap.Config.ARGB_8888
-            );
-            PixelCopy.request(previewDisplayView, bmp, copyResult -> {
-                if (copyResult == PixelCopy.SUCCESS) {
-                    ByteArrayOutputStream stream = new ByteArrayOutputStream();
-                    bmp.compress(Bitmap.CompressFormat.JPEG, 80, stream);
-                    result.success(stream.toByteArray());
-                } else {
-                    result.error("PIXEL_COPY_FAILED", "Code: " + copyResult, null);
-                }
-            }, handler);
-
         } else {
             result.notImplemented();
         }
+
     }
 
     @Override
@@ -364,7 +314,7 @@ public class NativeView implements PlatformView, MethodCallHandler {
             public void process(final Packet packet) {
                 handler.post(new Runnable() {
                     List<NormalizedLandmarkList> landmarkList =
-                    PacketGetter.getProtoVector(packet, NormalizedLandmarkList.parser());
+                            PacketGetter.getProtoVector(packet, NormalizedLandmarkList.parser());
                     @Override
                     public void run() {
                         for(NormalizedLandmarkList l:landmarkList){
@@ -377,12 +327,12 @@ public class NativeView implements PlatformView, MethodCallHandler {
     }
     private void captureAndSendFrame() {
         if (previewDisplayView == null || !previewDisplayView.isAttachedToWindow()) {
-            Log.w(TAG, "⚠️ SurfaceView is not attached. Skipping frame.");
+            Log.w(TAG, "⚠️ SurfaceView is not attached. Skipping PixelCopy.");
             return;
         }
 
         if (previewDisplayView.getWidth() == 0 || previewDisplayView.getHeight() == 0) {
-            Log.w(TAG, "⚠️ SurfaceView size is 0. Skipping frame.");
+            Log.w(TAG, "⚠️ SurfaceView size is 0. Skipping PixelCopy.");
             return;
         }
 
@@ -395,9 +345,8 @@ public class NativeView implements PlatformView, MethodCallHandler {
         try {
             PixelCopy.request(previewDisplayView, bitmap, copyResult -> {
                 if (copyResult == PixelCopy.SUCCESS) {
-                    Log.d(TAG, "✅ PixelCopy success, analyzing frame...");
-                    runSeatbeltDetection(bitmap);
-
+                    Log.d(TAG, "✅ PixelCopy success, sending frame...");
+                    sendFrameToFlutter(bitmap);
                 } else {
                     Log.e(TAG, "❌ PixelCopy failed: " + copyResult);
                 }
@@ -406,60 +355,6 @@ public class NativeView implements PlatformView, MethodCallHandler {
             Log.e(TAG, "❌ PixelCopy crashed: Surface is invalid", e);
         }
     }
-
-    private void runSeatbeltDetection(Bitmap bitmap) {
-        if (seatbeltInterpreter == null) {
-            Log.w(TAG, "❌ Seatbelt interpreter not loaded yet.");
-            return;
-        }
-
-        // 1) Resize & prepare the input buffer
-        Bitmap resized = Bitmap.createScaledBitmap(bitmap, 640, 640, true);
-        ByteBuffer input = ByteBuffer.allocateDirect(1 * 640 * 640 * 3 * 4)
-                .order(ByteOrder.nativeOrder());
-
-        int[] intValues = new int[640 * 640];
-        resized.getPixels(intValues, 0, 640, 0, 0, 640, 640);
-        for (int pixel : intValues) {
-            int r = (pixel >> 16) & 0xFF;
-            int g = (pixel >> 8) & 0xFF;
-            int b = pixel & 0xFF;
-            input.putFloat((float) r);
-            input.putFloat((float) g);
-            input.putFloat((float) b);
-        }
-        input.rewind();  // **important**: reset position before interpreter.run()
-
-        // 2) Run inference
-        float[][][] output = new float[1][5][8400];
-        seatbeltInterpreter.run(input, output);
-
-        // 3) Extract max scores for each class
-        float maxSeat = 0f, maxNoSeat = 0f;
-        for (int i = 0; i < 8400; i++) {
-            maxSeat   = Math.max(maxSeat,   output[0][3][i]);
-            maxNoSeat = Math.max(maxNoSeat, output[0][4][i]);
-        }
-
-        // 4) Compute normalized confidences
-        float sum = maxSeat + maxNoSeat;
-        float seatbeltConfidence   = sum > 0 ? maxSeat   / sum : 0f;
-        float noSeatbeltConfidence = sum > 0 ? maxNoSeat / sum : 0f;
-
-        Log.d(TAG, String.format("🔍 Seatbelt=%.2f  NoSeatbelt=%.2f",
-                seatbeltConfidence, noSeatbeltConfidence));
-
-        // 5) Emit a structured payload to Flutter
-        if (frameSink != null) {
-            Map<String,Object> payload = new HashMap<>();
-            payload.put("type",        "seatbelt");
-            payload.put("seat",        seatbeltConfidence);
-            payload.put("noSeat",      noSeatbeltConfidence);
-            frameSink.success(payload);
-        }
-    }
-
-
 
 
     private void sendFrameToFlutter(Bitmap bitmap) {
