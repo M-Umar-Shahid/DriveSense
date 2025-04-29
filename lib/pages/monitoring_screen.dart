@@ -28,7 +28,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   double _mouthOpenness = 0.0;
   List<Rect> _noSeatbeltBoxes = [];
   img.Image? _lastFrameImage;
-
+  int _cameraViewKey = 0;
   FlutterMediapipe? _mpController;
   Interpreter? _seatbeltInterpreter;
   StreamSubscription? _frameSubscription;
@@ -45,6 +45,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   DateTime? _eyesClosedSince;
   final Map<String, DateTime> _lastSavedTimes = {};
   final List<String> _recentAlerts = [];
+  bool _shouldRestartOnResume = false;
 
   @override
   void initState() {
@@ -56,26 +57,46 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _stopAnalyzing();
     _frameSubscription?.cancel();
     _mpController = null;
     _seatbeltInterpreter?.close();
     super.dispose();
   }
 
+  void _stopAnalyzing() {
+    _frameSubscription?.cancel();
+    _frameSubscription = null;
+
+    _mpController = null;
+
+    setState(() => _isAnalyzing = false);
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
 
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      // App went to background (screen turned off or user switched app)
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      // App went to background / screen off
       if (_isAnalyzing) {
-        debugPrint("⏸ App Paused → Stopping analysis safely...");
-        toggleAnalyzing(); // 👈 STOP analyzing
+        _shouldRestartOnResume = true;
+        _stopAnalyzing(); // stops frame stream & controller
       }
     }
-    if (state == AppLifecycleState.resumed) {
+
+    if (state == AppLifecycleState.resumed && _shouldRestartOnResume) {
       // App came back
-      debugPrint("▶️ App Resumed");
+      _shouldRestartOnResume = false;
+
+      // 1) Force Flutter to dispose & recreate the camera view
+      setState(() => _cameraViewKey++);
+
+      // 2) Give it a moment, then restart analysis
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) toggleAnalyzing();
+      });
     }
   }
 
@@ -85,36 +106,38 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   }
 
   Future<void> toggleAnalyzing() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     if (!_isAnalyzing) {
-      // Start analyzing
-      setState(() => _isAnalyzing = true);
-
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-
-      _tripStartTime = DateTime.now();
-      _tripAlertCount = 0;
+      // ── START ANALYSIS ─────────────────────────────────────────
+      _tripStartTime   = DateTime.now();
+      _tripAlertCount  = 0;
       _tripFinalStatus = 'Safe';
-      _currentTripRef = await FirebaseFirestore.instance.collection('trips').add({
+
+      _currentTripRef = await FirebaseFirestore.instance
+          .collection('trips')
+          .add({
         'uid': user.uid,
         'startTime': Timestamp.fromDate(_tripStartTime!),
         'alerts': 0,
         'status': 'Safe',
       });
 
+      setState(() => _isAnalyzing = true);
       _listenToFrameStream();
     } else {
-      // Stop analyzing
-      setState(() => _isAnalyzing = false);
+      // ── STOP ANALYSIS ──────────────────────────────────────────
 
-      // Very important: cancel the frame subscription FIRST
+      // 1) Cancel the frame subscription
       await _frameSubscription?.cancel();
       _frameSubscription = null;
 
-      // Also dispose mediapipe controller
-      _mpController = null;
+      // 2) Dispose of the Mediapipe controller if it supports stop()
+      //    (or just null it out if not)
       _mpController = null;
 
+      // 3) Update Firestore trip document
       if (_currentTripRef != null && _tripStartTime != null) {
         await _currentTripRef!.update({
           'endTime': Timestamp.now(),
@@ -122,26 +145,30 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
           'status': _tripFinalStatus,
         });
       }
-
       _currentTripRef = null;
+
+      // 4) Finally flip the flag so the UI switches back
+      setState(() => _isAnalyzing = false);
     }
   }
 
 
   void _listenToFrameStream() {
-    _frameSubscription = _frameStream.receiveBroadcastStream().listen((event) async {
+    _frameSubscription = _frameStream.receiveBroadcastStream().listen((event) {
       if (!_isAnalyzing) return;
       if (event is Uint8List) {
         final image = img.decodeImage(event);
         if (image != null) {
-          _lastFrameImage = image;
-          await _runSeatbeltDetection(event);
+          // fire & forget, but hand it its own frame copy
+          _runSeatbeltDetection(event, image);
         }
       }
     });
+
   }
 
-  Future<void> _runSeatbeltDetection(Uint8List frameBytes) async {
+
+  Future<void> _runSeatbeltDetection(Uint8List frameBytes, img.Image thisFrame) async {
     if (_seatbeltInterpreter == null) return;
 
     // 1. Preprocess & run inference
@@ -153,30 +180,29 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     final noSeatbeltConfs = output[0][4];
 
     // 3. Compute the average confidence
-    double sum = noSeatbeltConfs.fold(0.0, (acc, c) => acc + c);
-    double avgConf = sum / noSeatbeltConfs.length;
+    final double sum    = noSeatbeltConfs.fold(0.0, (acc, c) => acc + c);
+    final double avgConf = sum / noSeatbeltConfs.length;
 
     // 4. Compare against your threshold
     const double seatbeltAvgThreshold = 0.3;  // tune this as needed
-    bool detectedNoSeatbelt = avgConf > seatbeltAvgThreshold;
+    final bool detectedNoSeatbelt = avgConf > seatbeltAvgThreshold;
 
     // 5. Log it
     print("➡ Average no-seatbelt conf = ${avgConf.toStringAsFixed(3)} "
         "(threshold = ${seatbeltAvgThreshold.toStringAsFixed(3)})");
 
-    // 6. Update UI / save snapshot if needed
-    if (detectedNoSeatbelt && _canSave("NoSeatbelt") && _lastFrameImage != null) {
+    // 6. Update UI / save snapshot if needed, using the passed-in thisFrame
+    if (detectedNoSeatbelt && _canSave("NoSeatbelt")) {
       setState(() => _noSeatbelt = true);
-      _addRecentAlert("No Seatbelt (${(avgConf*100).toStringAsFixed(1)}%)");
-      _saveDetectionSnapshot(
-        image: _lastFrameImage!,
+      _addRecentAlert("No Seatbelt (${(avgConf * 100).toStringAsFixed(1)}%)");
+      await _saveDetectionSnapshot(
+        image: thisFrame,          // ← use the local frame copy here
         alertType: "No Seatbelt",
       );
     } else {
       if (_noSeatbelt) setState(() => _noSeatbelt = false);
     }
   }
-
 
 
 
@@ -218,6 +244,9 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     final average = (left + right) / 2;
     final mouthOpen = _calculateMouthOpenness(landmarkList, mouthIndices);
 
+    // ← Add this line to log the mouth openness:
+    debugPrint('👄 Mouth openness = ${mouthOpen.toStringAsFixed(3)}');
+
     setState(() {
       _averageEyeOpenness = average;
       _mouthOpenness = mouthOpen;
@@ -237,7 +266,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       if (_isDrowsy) setState(() => _isDrowsy = false);
     }
 
-    if (mouthOpen > 0.4) {
+    if (mouthOpen > 0.2) {
       if (_canSave("Yawning") && !_isYawning && _lastFrameImage != null) {
         setState(() => _isYawning = true);
         _addRecentAlert("Yawning detected");
@@ -319,6 +348,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
           Opacity(
             opacity: _isAnalyzing ? 1.0 : 0.0,
             child: SizedBox(
+              key: ValueKey(_cameraViewKey),
               height: 500,
               width: 300,
               child: NativeView(
@@ -446,7 +476,9 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _statusIndicator(_isDrowsy ? 'Drowsy' : 'Awake', _isDrowsy ? Colors.red : Colors.green, _averageEyeOpenness),
-                    _statusIndicator('Yawning', Colors.orange, _isYawning ? 0.8 : 0.2),
+                    _statusIndicator('Yawning',
+                        _mouthOpenness > 0.2 ? Colors.red : Colors.orange,
+                        _mouthOpenness.clamp(0.0, 1.0)),
                     _statusIndicator('Seatbelt', _noSeatbelt ? Colors.red : Colors.green, _noSeatbelt ? 0.9 : 0.1),
                   ],
                 ),
