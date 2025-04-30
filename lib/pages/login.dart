@@ -3,6 +3,7 @@ import 'package:drivesense/pages/forgot_password.dart';
 import 'package:drivesense/pages/signup.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'face_recognition.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -30,7 +31,7 @@ class _LoginPageState extends State<LoginPage> {
       // If successful, navigate to the bottom navigation page
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const Dashboard()),
+        MaterialPageRoute(builder: (context) => const FaceRecognitionPage()),
       );
     } catch (e) {
       // Handle errors such as wrong credentials
