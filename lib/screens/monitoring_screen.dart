@@ -38,7 +38,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   static const EventChannel _frameStream = EventChannel("flutter_mediapipe/frameStream");
 
   late final FlutterTts _tts;
-  String? _currentAlert;                   // e.g. "seatbelt", "drowsy", "yawning"
+  String? _currentAlert;
   final Map<String, DateTime> _lastSpoken = {};
   final Map<String, Duration> _cooldowns = {
     'drowsy':   Duration(minutes: 1),

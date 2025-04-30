@@ -101,10 +101,12 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 30),
-                PrimaryButton(
-                  label: 'Login',
-                  isLoading: _isLoading,
-                  onPressed: _login,
+                Center(
+                  child: PrimaryButton(
+                    label: 'Login',
+                    isLoading: _isLoading,
+                    onPressed: _login,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 const Center(

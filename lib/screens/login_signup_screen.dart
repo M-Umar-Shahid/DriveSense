@@ -39,11 +39,16 @@ class LoginSignupPage extends StatelessWidget {
                 children: [
                   AuthOptionButton(
                     label: 'Log In',
+                    color: Colors.white,
+                    textColor: Colors.blue,
+                    filled: true,
                     onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginPage())),
                   ),
                   const SizedBox(height: 10),
                   AuthOptionButton(
                     label: 'Sign Up',
+                    color: Colors.white,
+                    textColor: Colors.blue,
                     filled: true,
                     onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SignUpPage())),
                   ),
