@@ -11,6 +11,8 @@ import 'package:flutter_mediapipe/gen/landmark.pb.dart';
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:drivesense/pages/dashboard.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+
 
 class MonitoringPage extends StatefulWidget {
   const MonitoringPage({Key? key}) : super(key: key);
@@ -34,6 +36,16 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   StreamSubscription? _frameSubscription;
   static const EventChannel _frameStream = EventChannel("flutter_mediapipe/frameStream");
 
+  late final FlutterTts _tts;
+  String? _currentAlert;                   // e.g. "seatbelt", "drowsy", "yawning"
+  final Map<String, DateTime> _lastSpoken = {};
+  final Map<String, Duration> _cooldowns = {
+    'drowsy':   Duration(minutes: 1),
+    'yawning':  Duration(minutes: 1),
+    'seatbelt': Duration(seconds: 30),
+  };
+
+
   final List<int> leftEyeIndices = [159, 145, 33, 133];
   final List<int> rightEyeIndices = [386, 374, 362, 263];
   final List<int> mouthIndices = [13, 14, 78, 308];
@@ -52,11 +64,70 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadSeatbeltModel();
+
+    _tts = FlutterTts()
+      ..setLanguage("en-US")
+      ..setSpeechRate(0.5)
+      ..setVolume(1.0)
+      ..setPitch(1.0)
+      ..setCompletionHandler(_onUtteranceComplete);
   }
+
+  void _onUtteranceComplete() {
+    // once a message finishes, clear current
+    _currentAlert = null;
+  }
+
+
+  void _updateAlertSpeech() {
+    // 1️⃣ Pick the highest-priority active alert:
+    String? next;
+    if (_isDrowsy) {
+      next = 'drowsy';
+    } else if (_isYawning) {
+      next = 'yawning';
+    } else if (_noSeatbelt) {
+      next = 'seatbelt';
+    }
+
+    // 2️⃣ If nothing’s active, stop speaking and clear state:
+    if (next == null) {
+      _currentAlert = null;
+      _tts.stop();
+      return;
+    }
+
+    // 3️⃣ Don’t re-speak the same alert if it’s still playing:
+    if (_currentAlert == next) return;
+
+    // 4️⃣ Enforce per-alert cooldown so we don’t spam:
+    final now      = DateTime.now();
+    final lastTime = _lastSpoken[next];
+    final cooldown = _cooldowns[next]!;
+    if (lastTime != null && now.difference(lastTime) < cooldown) {
+      return;
+    }
+
+    // 5️⃣ Build the message for this alert:
+    final messages = {
+      'drowsy':  'Alert: Drowsiness detected. Please stay focused.',
+      'yawning': 'Alert: You are yawning. Please remain attentive.',
+      'seatbelt':'Warning: No seatbelt detected. Please buckle up.'
+    };
+    final msg = messages[next]!;
+
+    // 6️⃣ Record and speak
+    _currentAlert      = next;
+    _lastSpoken[next]  = now;
+    _tts.stop();
+    _tts.speak(msg);
+  }
+
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _tts.stop();
     _stopAnalyzing();
     _frameSubscription?.cancel();
     _mpController = null;
@@ -65,12 +136,16 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   }
 
   void _stopAnalyzing() {
+    _stopAnalyzingInternal();
+    if (mounted) {
+      setState(() => _isAnalyzing = false);
+    }
+  }
+
+  void _stopAnalyzingInternal() {
     _frameSubscription?.cancel();
     _frameSubscription = null;
-
     _mpController = null;
-
-    setState(() => _isAnalyzing = false);
   }
 
   @override
@@ -195,6 +270,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     // 6. Update UI / save snapshot if needed, using the passed-in thisFrame
     if (detectedNoSeatbelt && _canSave("NoSeatbelt")) {
       setState(() => _noSeatbelt = true);
+      _updateAlertSpeech();
       _addRecentAlert("No Seatbelt");
       await _saveDetectionSnapshot(
         image: thisFrame,          // ← use the local frame copy here
@@ -202,9 +278,9 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       );
     } else {
       if (_noSeatbelt) setState(() => _noSeatbelt = false);
+      _updateAlertSpeech();
     }
   }
-
 
 
   List<List<List<List<double>>>> _preprocessImage(Uint8List imageBytes) {
@@ -240,20 +316,17 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   void _onLandmarkStream(NormalizedLandmarkList landmarkList) {
     if (!_isAnalyzing) return;
 
-    final left = _calculateEyeOpenness(landmarkList, leftEyeIndices);
-    final right = _calculateEyeOpenness(landmarkList, rightEyeIndices);
-    final average = (left + right) / 2;
-    final mouthOpen = _calculateMouthOpenness(landmarkList, mouthIndices);
-
-    // // ← Add this line to log the mouth openness:
-    // debugPrint('👄 Mouth openness = ${mouthOpen.toStringAsFixed(3)}');
-    // debugPrint('👄 Eye openness = ${average.toStringAsFixed(3)}');
+    final left     = _calculateEyeOpenness(landmarkList, leftEyeIndices);
+    final right    = _calculateEyeOpenness(landmarkList, rightEyeIndices);
+    final average  = (left + right) / 2;
+    final mouthOpen= _calculateMouthOpenness(landmarkList, mouthIndices);
 
     setState(() {
       _averageEyeOpenness = average;
-      _mouthOpenness = mouthOpen;
+      _mouthOpenness      = mouthOpen;
     });
 
+    // —— DROWSY ——
     if (average < 0.12) {
       _eyesClosedSince ??= DateTime.now();
       if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(milliseconds: 100)) {
@@ -261,23 +334,33 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
           setState(() => _isDrowsy = true);
           _addRecentAlert("Drowsy detected");
           _saveDetectionSnapshot(image: _lastFrameImage!, alertType: "Drowsy");
+          _updateAlertSpeech();            // ← speak or queue the “drowsy” message
         }
       }
     } else {
       _eyesClosedSince = null;
-      if (_isDrowsy) setState(() => _isDrowsy = false);
+      if (_isDrowsy) {
+        setState(() => _isDrowsy = false);
+        _updateAlertSpeech();            // ← stop or switch to another alert
+      }
     }
 
+    // —— YAWNING ——
     if (mouthOpen > 0.35) {
       if (_canSave("Yawning") && !_isYawning && _lastFrameImage != null) {
         setState(() => _isYawning = true);
         _addRecentAlert("Yawning detected");
         _saveDetectionSnapshot(image: _lastFrameImage!, alertType: "Yawning");
+        _updateAlertSpeech();            // ← speak or queue the “yawning” message
       }
     } else {
-      if (_isYawning) setState(() => _isYawning = false);
+      if (_isYawning) {
+        setState(() => _isYawning = false);
+        _updateAlertSpeech();            // ← stop or switch to another alert
+      }
     }
   }
+
 
   double _calculateEyeOpenness(NormalizedLandmarkList l, List<int> i) {
     final upper = l.landmark[i[0]];
@@ -501,50 +584,6 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     );
   }
 }
-
-Widget _statusIndicator(String label, Color color, double confidence) {
-  return Column(
-    children: [
-      Stack(
-        alignment: Alignment.center,
-        children: [
-          SizedBox(
-            width: 60,
-            height: 60,
-            child: CircularProgressIndicator(
-              value: confidence.clamp(0.0, 1.0),
-              strokeWidth: 5,
-              valueColor: AlwaysStoppedAnimation<Color>(color),
-              backgroundColor: Colors.grey[300],
-            ),
-          ),
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: confidence > 0.2 ? color : Colors.grey,
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 5),
-      Text(label, style: const TextStyle(fontSize: 12)),
-      Text("${(confidence * 100).toStringAsFixed(0)}%", style: const TextStyle(fontSize: 10, color: Colors.grey)),
-    ],
-  );
-}
-
-Widget _alertTile(String alert, String time) {
-  return ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 0),
-    leading: const Icon(Icons.warning, color: Colors.redAccent),
-    title: Text(alert),
-    subtitle: Text(time, style: const TextStyle(color: Colors.grey)),
-    trailing: const Text('Clear', style: TextStyle(color: Colors.blueAccent, fontSize: 12)),
-  );
-}
-
 
 class SeatbeltBoxPainter extends CustomPainter {
   final List<Rect> boxes;
