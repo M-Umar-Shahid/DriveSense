@@ -159,13 +159,14 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       if (event is Uint8List) {
         final image = img.decodeImage(event);
         if (image != null) {
-          // fire & forget, but hand it its own frame copy
+          // ← store the latest frame
+          _lastFrameImage = image;
           _runSeatbeltDetection(event, image);
         }
       }
     });
-
   }
+
 
 
   Future<void> _runSeatbeltDetection(Uint8List frameBytes, img.Image thisFrame) async {
@@ -194,7 +195,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     // 6. Update UI / save snapshot if needed, using the passed-in thisFrame
     if (detectedNoSeatbelt && _canSave("NoSeatbelt")) {
       setState(() => _noSeatbelt = true);
-      _addRecentAlert("No Seatbelt (${(avgConf * 100).toStringAsFixed(1)}%)");
+      _addRecentAlert("No Seatbelt");
       await _saveDetectionSnapshot(
         image: thisFrame,          // ← use the local frame copy here
         alertType: "No Seatbelt",
@@ -244,17 +245,18 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     final average = (left + right) / 2;
     final mouthOpen = _calculateMouthOpenness(landmarkList, mouthIndices);
 
-    // ← Add this line to log the mouth openness:
-    debugPrint('👄 Mouth openness = ${mouthOpen.toStringAsFixed(3)}');
+    // // ← Add this line to log the mouth openness:
+    // debugPrint('👄 Mouth openness = ${mouthOpen.toStringAsFixed(3)}');
+    // debugPrint('👄 Eye openness = ${average.toStringAsFixed(3)}');
 
     setState(() {
       _averageEyeOpenness = average;
       _mouthOpenness = mouthOpen;
     });
 
-    if (average < 0.1) {
+    if (average < 0.12) {
       _eyesClosedSince ??= DateTime.now();
-      if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(seconds: 1)) {
+      if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(milliseconds: 100)) {
         if (_canSave("Drowsy") && !_isDrowsy && _lastFrameImage != null) {
           setState(() => _isDrowsy = true);
           _addRecentAlert("Drowsy detected");
@@ -266,7 +268,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       if (_isDrowsy) setState(() => _isDrowsy = false);
     }
 
-    if (mouthOpen > 0.2) {
+    if (mouthOpen > 0.35) {
       if (_canSave("Yawning") && !_isYawning && _lastFrameImage != null) {
         setState(() => _isYawning = true);
         _addRecentAlert("Yawning detected");
@@ -477,9 +479,9 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
                   children: [
                     _statusIndicator(_isDrowsy ? 'Drowsy' : 'Awake', _isDrowsy ? Colors.red : Colors.green, _averageEyeOpenness),
                     _statusIndicator('Yawning',
-                        _mouthOpenness > 0.2 ? Colors.red : Colors.orange,
+                        _mouthOpenness > 0.2 ? Colors.red : Colors.green,
                         _mouthOpenness.clamp(0.0, 1.0)),
-                    _statusIndicator('Seatbelt', _noSeatbelt ? Colors.red : Colors.green, _noSeatbelt ? 0.9 : 0.1),
+                    _statusIndicator('Seatbelt', _noSeatbelt ? Colors.red : Colors.green, 1),
                   ],
                 ),
                 const SizedBox(height: 20),

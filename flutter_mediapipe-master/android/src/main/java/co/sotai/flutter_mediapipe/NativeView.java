@@ -370,7 +370,4 @@ public class NativeView implements PlatformView, MethodCallHandler {
             Log.e("FlutterMediapipe", "❌ Failed to send frame: " + e.getMessage());
         }
     }
-
-
-
 }
