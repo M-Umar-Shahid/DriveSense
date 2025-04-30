@@ -5,7 +5,7 @@ import 'package:drivesense/pages/image_alerts_page.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'main.dart';
+import '../main.dart';
 
 
 class Dashboard extends StatefulWidget {

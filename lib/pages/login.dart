@@ -1,4 +1,3 @@
-import 'package:drivesense/pages/dashboard.dart';
 import 'package:drivesense/pages/forgot_password.dart';
 import 'package:drivesense/pages/signup.dart';
 import 'package:flutter/material.dart';

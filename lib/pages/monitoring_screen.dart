@@ -413,9 +413,24 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     });
 
     if (_currentTripRef != null) {
+      // add a dedicated alert‐doc under trips/{tripId}/alerts
+      await _currentTripRef!
+          .collection('alerts')
+          .add({
+        'alertType':  alertType,
+        'imageUrl':   imageUrl,
+        'timestamp':  Timestamp.fromDate(timestamp),
+      });
+
+      // then bump the summary fields on the parent trip:
       _tripAlertCount++;
       _tripFinalStatus = 'Alert Detected';
+      await _currentTripRef!.update({
+        'alerts': _tripAlertCount,
+        'status': _tripFinalStatus,
+      });
     }
+
   }
 
   void _addRecentAlert(String alert) {
