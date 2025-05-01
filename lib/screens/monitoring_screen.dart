@@ -191,13 +191,21 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       _tripAlertCount  = 0;
       _tripFinalStatus = 'Safe';
 
+      final userTripsQuery = FirebaseFirestore.instance
+          .collection('trips')
+          .where('uid', isEqualTo: user.uid);
+
+      final countSnap = await userTripsQuery.count().get();
+      final tripNumber = countSnap.count! + 1;
+
       _currentTripRef = await FirebaseFirestore.instance
           .collection('trips')
           .add({
-        'uid': user.uid,
+        'uid':       user.uid,
+        'tripNo':    tripNumber,
         'startTime': Timestamp.fromDate(_tripStartTime!),
-        'alerts': 0,
-        'status': 'Safe',
+        'alerts':    0,
+        'status':    'Safe',
       });
 
       setState(() => _isAnalyzing = true);

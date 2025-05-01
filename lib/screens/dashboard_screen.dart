@@ -8,6 +8,7 @@ import '../components/dashboard_screen_components/recent_trips_alert.dart';
 import '../components/dashboard_screen_components/summary_box.dart';
 import '../components/dashboard_screen_components/rounded_button.dart';
 import '../services/dashboard_sevice.dart';
+import 'all_trips_screen.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -61,17 +62,67 @@ class _DashboardState extends State<Dashboard> {
                   boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: Offset(0, 4))],
                 ),
                 child: Column(children: [
-                  Row(children: [
+                  const Row(children: [
                     Icon(Icons.analytics, color: Colors.deepPurple),
                     SizedBox(width: 8),
                     Text('Summary', style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black87)),
                   ]),
                   SizedBox(height: 12),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                    SummaryBox(title: 'Alerts', value: '$_alertCount', icon: Icons.warning_amber_rounded, iconColor: Colors.redAccent),
-                    SummaryBox(title: 'Trips', value: '$_tripCount', icon: Icons.route, iconColor: Colors.green),
-                    SummaryBox(title: 'Focus', value: '${_focusPercentage.toStringAsFixed(0)}%', icon: Icons.remove_red_eye, iconColor: Colors.blue),
-                  ]),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      // Alerts box
+                      Expanded(
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => const ImageAlertsPage()));
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: SummaryBox(
+                            title: 'Alerts',
+                            value: '$_alertCount',
+                            icon: Icons.warning_amber_rounded,
+                            iconColor: Colors.redAccent,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // Trips box
+                      Expanded(
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => const AllTripsPage()));
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: SummaryBox(
+                            title: 'Trips',
+                            value: '$_tripCount',
+                            icon: Icons.route,
+                            iconColor: Colors.green,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // Focus box
+                      Expanded(
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalyticsPage()));
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: SummaryBox(
+                            title: 'Focus',
+                            value: '${_focusPercentage.toStringAsFixed(0)}%',
+                            icon: Icons.remove_red_eye,
+                            iconColor: Colors.blue,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+
                 ]),
               ),
             ),
@@ -100,7 +151,23 @@ class _DashboardState extends State<Dashboard> {
               padding: EdgeInsets.fromLTRB(20, 25, 20, 8),
               child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Text('Recent Trips', style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.bold)),
-                Text('View All', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w500, color: Colors.blueAccent)),
+                InkWell(
+                           onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AllTripsPage()),
+                      );
+                    },
+                        child: const Text(
+                          'View All',
+                         style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.blueAccent,
+                          ),
+                    ),
+                ),
               ]),
             ),
             Padding(
