@@ -1,7 +1,9 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drivesense/screens/monitoring_screen.dart';
 import 'package:drivesense/screens/analytics_screen.dart';
 import 'package:drivesense/screens/image_alerts_screen.dart';
 import 'package:drivesense/screens/profile_page_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../components/dashboard_screen_components/dashboard_header.dart';
 import '../components/dashboard_screen_components/recent_trips_alert.dart';
@@ -9,6 +11,7 @@ import '../components/dashboard_screen_components/summary_box.dart';
 import '../components/dashboard_screen_components/rounded_button.dart';
 import '../services/dashboard_sevice.dart';
 import 'all_trips_screen.dart';
+import 'companies_list_page.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -18,10 +21,12 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
   final DashboardService _svc = DashboardService();
+  final String id = FirebaseAuth.instance.currentUser!.uid;
   String _username = '';
   int _alertCount = 0;
   int _tripCount = 0;
   double _focusPercentage = 0;
+  bool _openToWork = false;
 
   @override
   void initState() {
@@ -32,11 +37,15 @@ class _DashboardState extends State<Dashboard> {
   Future<void> _load() async {
     final name = await _svc.fetchUsername();
     final stats = await _svc.fetchStats();
+    final uid     = FirebaseAuth.instance.currentUser!.uid;
+    final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final openToWork = (userDoc.data()?['openToWork'] as bool?) ?? false;
     setState(() {
       _username = name;
       _alertCount = stats.alertCount;
       _tripCount = stats.tripCount;
       _focusPercentage = stats.focusPercentage;
+      _openToWork    = openToWork;
     });
   }
 
@@ -50,6 +59,11 @@ class _DashboardState extends State<Dashboard> {
             DashboardHeader(
               username: _username,
               onProfileTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage())),
+              showCompanies: _openToWork,
+              onCompaniesTap: () {
+                Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const CompaniesListPage()));
+              },
             ),
             SizedBox(height: 20),
             Padding(
@@ -109,7 +123,7 @@ class _DashboardState extends State<Dashboard> {
                       Expanded(
                         child: InkWell(
                           onTap: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalyticsPage()));
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => AnalyticsPage(driverId: id)));
                           },
                           borderRadius: BorderRadius.circular(12),
                           child: SummaryBox(
@@ -138,7 +152,7 @@ class _DashboardState extends State<Dashboard> {
               icon: Icons.pie_chart,
               label: "View Analytics",
               color: Colors.deepPurple,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalyticsPage())),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AnalyticsPage(driverId: id))),
             ),
             SizedBox(height: 14),
             RoundedButton(

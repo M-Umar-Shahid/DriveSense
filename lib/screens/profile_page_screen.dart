@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drivesense/screens/login_signup_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -19,12 +20,15 @@ class _ProfilePageState extends State<ProfilePage> with RouteAware{
   final user = FirebaseAuth.instance.currentUser;
   String? _imageUrl;
   bool _audioAlertsEnabled = true;
+  bool _openToWork = false;
 
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _loadOpenToWork();
+
   }
 
   Future<void> _loadUserData() async {
@@ -34,6 +38,18 @@ class _ProfilePageState extends State<ProfilePage> with RouteAware{
       _imageUrl = updatedUser?.photoURL;
     });
   }
+
+  Future<void> _loadOpenToWork() async {
+        if (user != null) {
+          final doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user!.uid)
+              .get();
+          if (doc.exists) {
+            setState(() => _openToWork = doc.data()?['openToWork'] as bool? ?? false);
+          }
+        }
+      }
 
 
   Future<void> _loadAudioToggle() async {
@@ -185,6 +201,31 @@ class _ProfilePageState extends State<ProfilePage> with RouteAware{
             Expanded(
               child: ListView(
                 children: [
+              // ─── New Open to work switch ───
+                                SwitchListTile(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                  title: const Text(
+                                    "Open to work",
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 16.0,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.black87,
+                                    ),
+                            ),
+                        secondary: const Icon(Icons.work_outline, color: Colors.black87),
+                        activeColor: Colors.blueAccent,
+                        value: _openToWork,
+                        onChanged: (val) async {
+                          setState(() => _openToWork = val);
+                          // persist immediately
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(user!.uid)
+                              .update({'openToWork': val});
+                        },
+                      ),
+                      const SizedBox(height: 20),
                   SwitchListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
                     title: const Text(

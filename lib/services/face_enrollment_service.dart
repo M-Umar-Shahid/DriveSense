@@ -1,20 +1,30 @@
 import 'dart:io';
 import 'package:camera/camera.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 class FaceEnrollmentService {
   CameraController? controller;
-  final FaceDetector _faceDetector = GoogleMlKit.vision.faceDetector(
-      FaceDetectorOptions(performanceMode: FaceDetectorMode.accurate, enableContours: false, enableLandmarks: false)
+  final _faceDetector = GoogleMlKit.vision.faceDetector(
+    FaceDetectorOptions(
+      performanceMode: FaceDetectorMode.accurate,
+      enableContours: false,
+      enableLandmarks: false,
+    ),
   );
   Interpreter? _interpreter;
-  bool get isReady => controller?.value.isInitialized == true && _interpreter != null;
+
+  bool get isReady =>
+      controller?.value.isInitialized == true && _interpreter != null;
 
   Future<void> init() async {
     final cams = await availableCameras();
-    final front = cams.firstWhere((c) => c.lensDirection == CameraLensDirection.front, orElse: () => cams.first);
+    final front = cams.firstWhere(
+          (c) => c.lensDirection == CameraLensDirection.front,
+      orElse: () => cams.first,
+    );
     controller = CameraController(front, ResolutionPreset.medium, enableAudio: false);
     await controller!.initialize();
     _interpreter = await Interpreter.fromAsset('assets/models/mobilefacenet.tflite');
@@ -22,23 +32,49 @@ class FaceEnrollmentService {
 
   Future<List<double>?> captureEmbedding() async {
     if (!isReady) return null;
-    final pic = await controller!.takePicture();
-    final bytes = await File(pic.path).readAsBytes();
-    final frame = img.decodeImage(bytes)!;
-    final inputImage = InputImage.fromFilePath(pic.path);
-    final faces = await _faceDetector.processImage(inputImage);
-    if (faces.isEmpty) return null;
-    final box = faces.first.boundingBox;
-    final crop = img.copyCrop(
-        frame,
-        x: box.left.toInt().clamp(0, frame.width),
-        y: box.top.toInt().clamp(0, frame.height),
-        width: box.width.toInt().clamp(0, frame.width),
-        height: box.height.toInt().clamp(0, frame.height)
-    );
-    final face112 = img.copyResize(crop, width: 112, height: 112);
-    return _getEmbedding(face112);
+    try {
+      // 1) capture photo
+      final pic = await controller!.takePicture();
+      final path = pic.path;
+
+      // 2) run ML Kit on the file
+      final inputImage = InputImage.fromFilePath(path);
+      final faces = await _faceDetector.processImage(inputImage);
+      debugPrint("🔍 Face detector found ${faces.length} faces");
+
+      if (faces.isEmpty) {
+        // no face → clean up and return
+        await File(path).delete();
+        return null;
+      }
+
+      // 3) read bytes into memory so we can delete the file safely
+      final bytes = await File(path).readAsBytes();
+      await File(path).delete();
+
+      // 4) decode & mirror
+      img.Image frame = img.decodeImage(bytes)!;
+      frame = img.flipHorizontal(frame);
+
+      // 5) crop & resize
+      final box = faces.first.boundingBox;
+      final x = box.left.toInt().clamp(0, frame.width - 1);
+      final y = box.top.toInt().clamp(0, frame.height - 1);
+      final w = box.width.toInt().clamp(1, frame.width - x);
+      final h = box.height.toInt().clamp(1, frame.height - y);
+      final crop = img.copyCrop(frame, x: x, y: y, width: w, height: h);
+      final face112 = img.copyResizeCropSquare(crop, size: 112);
+
+      // 6) run embedding model
+      final embedding = await _getEmbedding(face112);
+      debugPrint("✅ Generated embedding length ${embedding.length}");
+      return embedding;
+    } catch (e) {
+      debugPrint("⚠️ captureEmbedding error: $e");
+      return null;
+    }
   }
+
 
   Future<List<double>> _getEmbedding(img.Image faceImg) async {
     final input = List.generate(1, (_) =>

@@ -7,7 +7,8 @@ import '../components/analytics_screen_components/pie_breakdown.dart';
 import '../components/analytics_screen_components/recent_detections_list.dart';
 
 class AnalyticsPage extends StatefulWidget {
-  const AnalyticsPage({super.key});
+  final String driverId;
+  const AnalyticsPage({Key? key, required this.driverId}) : super(key: key);
   @override
   State<AnalyticsPage> createState() => _AnalyticsPageState();
 }
@@ -28,17 +29,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   Future<void> _loadAll() async {
-    final rec = await _svc.fetchRecentDetections();
-    final weekly = await _svc.fetchWeeklyTrends();
-    final monthly = await _svc.fetchMonthlyBreakdown();
-    final totals = await _svc.fetchTotals();
+    final rec = await _svc.fetchRecentDetections(widget.driverId, limit: 5);
+    final weekly = await _svc.fetchWeeklyTrends(widget.driverId);
+    final monthly = await _svc.fetchMonthlyBreakdown(widget.driverId);
+    final totals = await _svc.fetchTotals(widget.driverId);
     setState(() {
       _recentDetections = rec;
-      _weeklyCounts = weekly;
-      _monthlyCounts = monthly;
-      _totalAlerts = totals['totalAlerts'];
-      _totalHours = totals['totalHours'];
-      _recommendation = totals['recommendation'];
+      _weeklyCounts     = weekly;
+      _monthlyCounts    = monthly;
+      _totalAlerts      = totals['totalAlerts'];
+      _totalHours       = totals['totalHours'];
+      _recommendation   = totals['recommendation'];
     });
   }
 

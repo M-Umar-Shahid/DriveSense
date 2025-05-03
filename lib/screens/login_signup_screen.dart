@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../components/getting_started_screen_components/logo_display.dart';
 import '../components/login_signup_screen_components/auth_option_button.dart';
-import 'login_screen.dart';
+import 'package:drivesense/screens/login_screen.dart';
 
 class LoginSignupPage extends StatelessWidget {
   const LoginSignupPage({super.key});
@@ -42,7 +42,7 @@ class LoginSignupPage extends StatelessWidget {
                     color: Colors.white,
                     textColor: Colors.blue,
                     filled: true,
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginPage())),
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LoginPage())),
                   ),
                   const SizedBox(height: 10),
                   AuthOptionButton(

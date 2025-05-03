@@ -4,7 +4,6 @@ import '../components/face_enrollment_screen_components/camera_preview_widget.da
 import '../components/face_enrollment_screen_components/capture_button.dart';
 import '../components/face_enrollment_screen_components/face_overlay_box.dart';
 
-
 class FaceEnrollmentPage extends StatefulWidget {
   final String email;
   final String password;
@@ -47,7 +46,11 @@ class _FaceEnrollmentPageState extends State<FaceEnrollmentPage> {
   Future<void> _capture() async {
     if (!_ready) return;
     setState(() => _processing = true);
+
+    debugPrint("🔴 Starting captureEmbedding…");
     final emb = await _svc.captureEmbedding();
+    debugPrint("🔵 captureEmbedding returned embedding: $emb");
+
     setState(() => _processing = false);
     if (emb != null) {
       await widget.onEnrollmentComplete(emb, widget.email, widget.password, widget.displayName);
@@ -60,6 +63,7 @@ class _FaceEnrollmentPageState extends State<FaceEnrollmentPage> {
     }
   }
 
+
   @override
   void dispose() {
     _svc.dispose();
@@ -69,26 +73,47 @@ class _FaceEnrollmentPageState extends State<FaceEnrollmentPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Face Enrollment')),
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text('Face Enrollment'),
+        centerTitle: true,
+      ),
       body: !_ready
           ? const Center(child: CircularProgressIndicator())
           : Stack(
+        fit: StackFit.expand,
         children: [
           CameraPreviewWidget(controller: _svc.controller!),
+          // dark overlay with transparent hole
+          Container(
+            color: Colors.black45,
+          ),
           const FaceOverlayBox(),
           Positioned(
-            top: 48,
+            top: 80,
             left: 0,
             right: 0,
             child: const Center(
-              child: Text('Align your face in the box', style: TextStyle(color: Colors.white, fontSize: 18)),
+              child: Text(
+                'Align your face inside the frame',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
           ),
           Positioned(
-            bottom: 32,
+            bottom: 40,
             left: 0,
             right: 0,
-            child: CaptureButton(isProcessing: _processing, onCapture: _capture),
+            child: CaptureButton(
+              isProcessing: _processing,
+              onCapture: _capture,
+            ),
           ),
         ],
       ),

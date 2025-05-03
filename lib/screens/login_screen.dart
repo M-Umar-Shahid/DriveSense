@@ -1,12 +1,18 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:drivesense/screens/face_recognition_screen.dart';
 import 'package:drivesense/screens/signup_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../components/edit_profile_screen_components/custom_password_file.dart';
 import '../components/edit_profile_screen_components/custom_text_field.dart';
 import '../components/edit_profile_screen_components/primary_button.dart';
 import '../components/login_screen_components/social_login_buttons.dart';
-import 'face_recognition_screen.dart';
+import 'company_admin_dashboard_screen.dart';
+import 'dashboard_screen.dart';
+import 'face_enrollment_screen.dart';
 import 'forgot_password_screen.dart';
+
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -21,24 +27,131 @@ class _LoginPageState extends State<LoginPage> {
   final _authService = AuthService();
   bool _isLoading = false;
 
+
   Future<void> _login() async {
     setState(() => _isLoading = true);
     try {
+      // 1) Sign in
       await _authService.signIn(
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const FaceRecognitionPage()),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login failed: $e')),
+
+      // 2) Load user profile
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      if (!doc.exists) throw Exception("User profile not found");
+
+      final data = doc.data()!;
+      final role = data['role'] as String? ?? 'driver';
+
+      // 3a) Company-admin → CompanyAdminDashboard
+      if (role == 'company_admin') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const CompanyAdminDashboard()),
+        );
+        return;
+      }
+
+      // 3b) Driver → face-enroll if no embedding, otherwise go to Dashboard
+      final emb = data['faceEmbedding'] as List<dynamic>?;
+      final hasEmbedding = emb != null && emb.isNotEmpty;
+
+      if (!hasEmbedding) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => FaceEnrollmentPage(
+              email: _emailController.text.trim(),
+              password: _passwordController.text.trim(),
+              displayName: data['displayName'] as String? ?? '',
+              onEnrollmentComplete: (newEmb, email, pwd, name) async {
+                // store embedding
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
+                    .update({'faceEmbedding': newEmb});
+                if (!mounted) return;
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const Dashboard()),
+                );
+              },
+            ),
+          ),
+        );
+      } else {
+        // already enrolled → go straight to main Dashboard
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const FaceRecognitionPage()),
         );
       }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Login failed: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+
+  Future<void> _loginWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      await _authService.signInWithGoogle();
+
+      // After Google sign-in, pull the same routing logic as your email login:
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      if (!doc.exists) throw Exception("User profile not found");
+
+      final data = doc.data()!;
+      final role = data['role'] as String? ?? 'driver';
+
+      if (role == 'company_admin') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const CompanyAdminDashboard()),
+        );
+      } else {
+        final emb = data['faceEmbedding'] as List<dynamic>?;
+        final hasEmbedding = emb != null && emb.isNotEmpty;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => hasEmbedding
+                ? const FaceRecognitionPage()
+                : FaceEnrollmentPage(
+              email: FirebaseAuth.instance.currentUser!.email!,
+              password: '', // not needed for Google users
+              displayName: data['displayName'] as String? ?? '',
+              onEnrollmentComplete: (newEmb, email, pwd, name) async {
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
+                    .update({'faceEmbedding': newEmb});
+                if (!mounted) return;
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const Dashboard()),
+                );
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Google sign-in failed: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -116,11 +229,15 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                SocialLoginButtons(
-                  onGoogle: () {},
-                  onTwitter: () {},
-                  onInstagram: () {},
-                ),
+             Center(
+                   child: IconButton(
+                     onPressed: _loginWithGoogle,
+                     icon: SizedBox(
+                       width: 40, height: 40,
+                       child: Image.asset('assets/images/google-logo.png'),
+                 ),
+             ),
+         ),
                 const SizedBox(height: 20),
                 Center(
                   child: Row(

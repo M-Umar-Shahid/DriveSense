@@ -12,7 +12,20 @@
           "package_name": "com.example.drivesense"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "119076464153-psrav6e4g18r0e82aloe05vna9ajqfav.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.drivesense",
+            "certificate_hash": "893da0325071886efa2dc6c7f583ba4354a9b617"
+          }
+        },
+        {
+          "client_id": "119076464153-7hkh2rvh6gk3ha5bsg5s6p860800h7c6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAqsVQO1VbS4lZMchXo2UXBWHFPfAT1wjo"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "119076464153-7hkh2rvh6gk3ha5bsg5s6p860800h7c6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
