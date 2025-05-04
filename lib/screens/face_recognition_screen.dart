@@ -1,10 +1,8 @@
-import 'package:drivesense/screens/dashboard_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-
+import 'package:drivesense/screens/dashboard_screen.dart';
 import '../components/face_enrollment_screen_components/camera_preview_widget.dart';
 import '../components/face_enrollment_screen_components/face_overlay_box.dart';
-import '../components/face_recognition_screen_components/verify_button.dart';
 import '../services/face_recognition_sevice.dart';
 
 class FaceRecognitionPage extends StatefulWidget {
@@ -21,39 +19,38 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
   @override
   void initState() {
     super.initState();
-    _initialize();
-  }
-
-  Future<void> _initialize() async {
-    await _svc.init();
-    setState(() => _ready = _svc.isReady);
+    _svc.init().then((_) => setState(() => _ready = _svc.isReady));
   }
 
   Future<void> _verify() async {
-    if (!_ready) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please wait for setup to complete')),
-      );
-      return;
-    }
+    if (!_ready || _processing) return;
+
     setState(() => _processing = true);
+
     final liveEmb = await _svc.captureLiveEmbedding();
     if (liveEmb != null && _svc.storedEmbedding != null) {
       final dist = _svc.compare(liveEmb, _svc.storedEmbedding!);
       if (dist < 0.5) {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const Dashboard()));
+        // matched → navigate away; loader stays until dispose
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const Dashboard()),
+        );
         return;
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Face not recognized (dist=${dist.toStringAsFixed(2)})')),
-        );
+        _showMessage('Face not recognized (dist=${dist.toStringAsFixed(2)})');
       }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No face detected; try again')),
-      );
+      _showMessage('No face detected; please try again.');
     }
-    setState(() => _processing = false);
+
+    // on failure, stop processing so button re-appears
+    if (mounted) setState(() => _processing = false);
+  }
+
+  void _showMessage(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
   }
 
   @override
@@ -65,18 +62,85 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Face Verification')),
-      body: !_ready
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: const Text('Face Verification'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+      ),
+      body: Column(
         children: [
-          CameraPreviewWidget(controller: _svc.controller as CameraController),
-          const FaceOverlayBox(),
-          Positioned(
-            bottom: 32,
-            left: 0,
-            right: 0,
-            child: VerifyButton(isProcessing: _processing, onPressed: _verify),
+          // camera + overlay area
+          Expanded(
+            child: Stack(
+              children: [
+                if (_ready)
+                  CameraPreviewWidget(controller: _svc.controller as CameraController)
+                else
+                  const Center(child: CircularProgressIndicator()),
+                // dark overlay
+                Positioned.fill(child: Container(color: Colors.black45)),
+                // oval cut-out
+                Center(
+                  child: ClipOval(
+                    child: Container(
+                      width: 260,
+                      height: 360,
+                      color: Colors.transparent,
+                    ),
+                  ),
+                ),
+                // oval border
+                Center(
+                  child: Container(
+                    width: 260,
+                    height: 360,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white70, width: 3),
+                      borderRadius: BorderRadius.circular(180),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // bottom sheet with instructions + verify button
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Align your face inside the frame and tap to verify.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.black87),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: FloatingActionButton(
+                    backgroundColor: Colors.green,
+                    onPressed: _verify,
+                    child: _processing
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Icon(Icons.check, size: 32),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Tap to Verify',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                ),
+              ],
+            ),
           ),
         ],
       ),

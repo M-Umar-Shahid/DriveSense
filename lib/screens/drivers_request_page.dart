@@ -4,63 +4,200 @@ import 'package:flutter/material.dart';
 
 import '../services/request_service.dart';
 
-
 class DriverRequestsPage extends StatelessWidget {
+  const DriverRequestsPage({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return Scaffold(
+        body: Center(child: Text('Please log in to view requests.')),
+      );
+    }
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Hire Requests')),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('requests')
-            .where('type',   isEqualTo: 'hire_driver')
-            .where('toId',   isEqualTo: uid)
-            .where('status', isEqualTo: 'pending')
-            .orderBy('timestamp', descending: true)
-            .snapshots(),
-        builder: (ctx, snap) {
-          if (!snap.hasData) return CircularProgressIndicator();
-          final docs = snap.data!.docs;
-          if (docs.isEmpty) return Center(child: Text('No requests'));
-          return ListView(
-            children: docs.map((doc) {
-              final data     = doc.data()! as Map<String, dynamic>;
-              final companyId= data['fromId'] as String;
-              return FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance.collection('companies').doc(companyId).get(),
-                builder: (ctx, compSnap) {
-                  if (!compSnap.hasData) return ListTile(title: Text('Loading…'));
-                  final comp = compSnap.data!;
-                  return ListTile(
-                    title: Text(comp['name'] ?? 'Company'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextButton(
-                          child: const Text('Accept'),
-                          onPressed: () {
-                            RequestService()
-                                .respondToRequest(doc.id, true)
-                                .then((_) => (context as Element).markNeedsBuild());
-                          },
-                        ),
-                        TextButton(
-                          child: const Text('Reject'),
-                          onPressed: () {
-                            RequestService()
-                                .respondToRequest(doc.id, false)
-                                .then((_) => (context as Element).markNeedsBuild());
-                          },
-                        ),
-                      ],
+      backgroundColor: Colors.grey[100],
+      body: Column(
+        children: [
+          // Gradient Header
+          Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF4285F4), Color(0xFF1976D2)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(32),
+                bottomRight: Radius.circular(32),
+              ),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                child: Row(
+                  children: [
+                    // Back button
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () => Navigator.of(context).pop(),
                     ),
-                  );
-                },
-              );
-            }).toList(),
-          );
-        },
+                    const SizedBox(width: 8),
+                    // Title
+                    const Icon(Icons.business_center, size: 28, color: Colors.white70),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Hire Requests',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Stream of requests
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('requests')
+                  .where('type', isEqualTo: 'hire_driver')
+                  .where('toId', isEqualTo: uid)
+                  .where('status', isEqualTo: 'pending')
+                  .orderBy('timestamp', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const Center(child: Text('Error loading requests'));
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final docs = snapshot.data!.docs;
+                if (docs.isEmpty) {
+                  return const Center(child: Text('No pending requests'));
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final doc = docs[index];
+                    final data = doc.data()! as Map<String, dynamic>;
+                    final companyId = data['fromId'] as String;
+                    final timestamp = (data['timestamp'] as Timestamp).toDate();
+
+                    return FutureBuilder<DocumentSnapshot>(
+                      future: FirebaseFirestore.instance
+                          .collection('companies')
+                          .doc(companyId)
+                          .get(),
+                      builder: (ctx, compSnap) {
+                        String name = 'Loading...';
+                        if (compSnap.hasData && compSnap.data!.exists) {
+                          final compData = compSnap.data!.data() as Map<String, dynamic>;
+                          name = compData['companyName'] ?? 'Company';
+                        }
+
+                        return Card(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 24,
+                                  backgroundColor: Theme.of(context).primaryColorLight,
+                                  child: Text(
+                                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                    style: TextStyle(
+                                      color: Theme.of(context).primaryColorDark,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${timestamp.toLocal()}'.split('.')[0],
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Accept & Reject buttons
+                                Column(
+                                  children: [
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        foregroundColor: Colors.white, backgroundColor: Colors.green,
+                                        minimumSize: const Size(80, 36),
+                                      ),
+                                      onPressed: () async {
+                                        await RequestService()
+                                            .respondToRequest(doc.id, true);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Request accepted')),
+                                        );
+                                      },
+                                      child: const Text('Accept'),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        foregroundColor: Colors.white, backgroundColor: Colors.redAccent,
+                                        minimumSize: const Size(80, 36),
+                                      ),
+                                      onPressed: () async {
+                                        await RequestService()
+                                            .respondToRequest(doc.id, false);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Request rejected')),
+                                        );
+                                      },
+                                      child: const Text('Reject'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

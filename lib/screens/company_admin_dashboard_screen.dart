@@ -26,8 +26,7 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
   @override
   void initState() {
     super.initState();
-    _companyRef =
-        FirebaseFirestore.instance.collection('companies').doc(companyId);
+    _companyRef = FirebaseFirestore.instance.collection('companies').doc(companyId);
   }
 
   Future<void> _removeDriver(String driverId) async {
@@ -45,114 +44,145 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
 
   void _logout() async {
     await FirebaseAuth.instance.signOut();
-    Navigator.of(context)
-        .pushNamedAndRemoveUntil('/login', (_) => false); // adjust route
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginSignupPage()),
+          (route) => false,
+    );
   }
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Company Admin'),
-        automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person_add),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => AddDriverPage(companyId: companyId),
-                ),
-              );
-            },
-          ),
-
-          TextButton.icon(
-            icon: const Icon(Icons.group_add),
-            label: const Text('View Join Requests'),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CompanyRequestsPage(companyId: companyId),
-                ),
-              );
-            },
-          ),
-
-
-          // ← replace your existing logout button with this:
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Confirm Logout'),
-                  content: const Text('Are you sure you want to log out?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pushReplacement(context,
-                  MaterialPageRoute(builder: (_) => const LoginSignupPage())),
-                      child: const Text('Cancel'),
+      backgroundColor: Colors.grey[100],
+      body: Column(
+        children: [
+          // Gradient Header
+          Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF4285F4), Color(0xFF1976D2)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(32),
+                bottomRight: Radius.circular(32),
+              ),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Title
+                    const Text(
+                      'Company Admin',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(ctx).pop();
-                        _logout();
-                      },
-                      child: const Text('Logout'),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.person_add, color: Colors.white),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AddDriverPage(companyId: companyId),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.mail, color: Colors.white),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => CompanyRequestsPage(companyId: companyId),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.logout, color: Colors.white),
+                          onPressed: () => showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Confirm Logout'),
+                              content: const Text('Are you sure you want to log out?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.of(ctx).pop();
+                                    _logout();
+                                  },
+                                  child: const Text('Logout'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // — Search Bar —
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              controller: _searchCtrl,
-              decoration: InputDecoration(
-                hintText: 'Search drivers…',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
               ),
-              onChanged: (val) => setState(() => _search = val.toLowerCase()),
             ),
           ),
 
+          // Search & Actions
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.person_add_alt_1),
-              label: const Text('Hire Drivers'),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => OpenDriversPage(companyId: companyId),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'Search drivers...',
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    onChanged: (val) => setState(() => _search = val.toLowerCase()),
                   ),
-                );
-              },
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Hire Drivers'),
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white, backgroundColor: const Color(0xFF1976D2),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => OpenDriversPage(companyId: companyId),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
 
-
-          // — Driver List —
+          // Driver List
           Expanded(
             child: StreamBuilder<DocumentSnapshot>(
               stream: _companyRef.snapshots(),
@@ -172,7 +202,6 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
                     if (usersSnap.hasError) return const Center(child: Text('Error loading drivers'));
                     if (!usersSnap.hasData) return const Center(child: CircularProgressIndicator());
 
-                    // filter by search
                     final docs = usersSnap.data!.docs.where((d) {
                       final data = d.data()! as Map<String, dynamic>;
                       final name = (data['displayName'] ?? '').toString().toLowerCase();
@@ -183,6 +212,7 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
                     if (docs.isEmpty) return const Center(child: Text('No matching drivers'));
 
                     return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       itemCount: docs.length,
                       itemBuilder: (_, i) {
                         final d = docs[i].data()! as Map<String, dynamic>;
@@ -191,19 +221,17 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
                         final email = d['email'] ?? 'No email';
 
                         return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 2,
+                          margin: const EdgeInsets.symmetric(vertical: 6),
                           child: ListTile(
-                            title: Text(name),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
                             subtitle: Text(email),
-                            // make the entire tile tappable:
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => AnalyticsPage(driverId: id),
-                                ),
-                              );
-                            },
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => AnalyticsPage(driverId: id)),
+                            ),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -211,11 +239,19 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
                                   future: _companyService.getAverageRating(id),
                                   builder: (ctx, ratingSnap) {
                                     final rating = ratingSnap.data ?? 0.0;
-                                    return Row(
-                                      children: [
-                                        const Icon(Icons.star, size: 16, color: Colors.amber),
-                                        Text(rating.toStringAsFixed(1)),
-                                      ],
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.amber.shade100,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.star, size: 16, color: Colors.amber),
+                                          const SizedBox(width: 4),
+                                          Text(rating.toStringAsFixed(1)),
+                                        ],
+                                      ),
                                     );
                                   },
                                 ),

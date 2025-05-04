@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../../screens/drivers_request_page.dart';
 
 class DashboardHeader extends StatelessWidget {
@@ -9,78 +8,112 @@ class DashboardHeader extends StatelessWidget {
   final VoidCallback? onCompaniesTap;
 
   const DashboardHeader({
+    super.key,
     required this.username,
     required this.onProfileTap,
     this.showCompanies = false,
     this.onCompaniesTap,
-    super.key,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1976D2),
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(28),
-          bottomRight: Radius.circular(28),
-        ),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 25, 20, 35),
       width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF4285F4), Color(0xFF1976D2)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(32),
+          bottomRight: Radius.circular(32),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 6,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                'Hi, $username 👋',
-                style: const TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              // Greeting
+              Expanded(
+                child: Text(
+                  'Hi, $username',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
-              Row(
-                children: [
-                  if (showCompanies && onCompaniesTap != null) ...[
-                    IconButton(
-                      onPressed: onCompaniesTap,
-                      icon: const Icon(Icons.business, color: Colors.white, size: 28),
-                      tooltip: 'Companies',
-                    ),
-                  ],
-                  TextButton.icon(
-                    icon: const Icon(Icons.email),
-                    label: const Text('View Hire Requests'),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => DriverRequestsPage()),
-                      );
-                    },
-                  ),
-                  IconButton(
-                    onPressed: onProfileTap,
-                    icon: const Icon(Icons.person, color: Colors.white, size: 28),
-                  ),
-                ],
+
+              // Optional companies icon
+              if (showCompanies && onCompaniesTap != null) ...[
+                IconButton(
+                  onPressed: onCompaniesTap,
+                  icon: const Icon(Icons.business),
+                  color: Colors.white,
+                  tooltip: 'Companies',
+                ),
+              ],
+
+              // Hire requests button
+              _RequestsButton(),
+
+              // Profile icon
+              IconButton(
+                onPressed: onProfileTap,
+                icon: const Icon(Icons.person),
+                color: Colors.white,
+                tooltip: 'Profile',
               ),
             ],
           ),
-          const SizedBox(height: 15),
+          const SizedBox(height: 16),
           const Text(
             "This Month's Overview",
             style: TextStyle(
               fontFamily: 'Poppins',
-              fontSize: 16,
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
               color: Colors.white70,
-              fontWeight: FontWeight.w400,
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RequestsButton extends StatelessWidget {
+  const _RequestsButton({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => DriverRequestsPage()),
+      ),
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: Colors.white70),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      icon: const Icon(Icons.email, size: 20, color: Colors.white),
+      label: const Text(
+        'Hire Requests',
+        style: TextStyle(color: Colors.white, fontSize: 14),
       ),
     );
   }

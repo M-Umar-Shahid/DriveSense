@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/face_enrollment_service.dart';
 import '../components/face_enrollment_screen_components/camera_preview_widget.dart';
-import '../components/face_enrollment_screen_components/capture_button.dart';
-import '../components/face_enrollment_screen_components/face_overlay_box.dart';
 
 class FaceEnrollmentPage extends StatefulWidget {
   final String email;
@@ -35,29 +33,44 @@ class _FaceEnrollmentPageState extends State<FaceEnrollmentPage> {
   @override
   void initState() {
     super.initState();
-    _initialize();
-  }
-
-  Future<void> _initialize() async {
-    await _svc.init();
-    setState(() => _ready = _svc.isReady);
+    _svc.init().then((_) => setState(() => _ready = _svc.isReady));
   }
 
   Future<void> _capture() async {
-    if (!_ready) return;
+    if (!_ready || _processing) return;
+
     setState(() => _processing = true);
 
     debugPrint("🔴 Starting captureEmbedding…");
     final emb = await _svc.captureEmbedding();
-    debugPrint("🔵 captureEmbedding returned embedding: $emb");
+    debugPrint("🔵 captureEmbedding returned: $emb");
 
-    setState(() => _processing = false);
     if (emb != null) {
-      await widget.onEnrollmentComplete(emb, widget.email, widget.password, widget.displayName);
+      // Try to save/embed; keep showing the loader until callback completes or throws
+      try {
+        await widget.onEnrollmentComplete(
+          emb,
+          widget.email,
+          widget.password,
+          widget.displayName,
+        );
+        // Success path: presumably you navigate away in onEnrollmentComplete,
+        // so we deliberately do NOT call setState(false) here.
+      } catch (err) {
+        // If saving fails, stop the loader and show an error
+        setState(() => _processing = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Enrollment failed: $err')),
+          );
+        }
+      }
     } else {
+      // No face detected: stop loader and show message
+      setState(() => _processing = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No face detected; try again.')),
+          const SnackBar(content: Text('No face detected; please try again.')),
         );
       }
     }
@@ -80,39 +93,81 @@ class _FaceEnrollmentPageState extends State<FaceEnrollmentPage> {
         title: const Text('Face Enrollment'),
         centerTitle: true,
       ),
-      body: !_ready
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
-        fit: StackFit.expand,
+      body: Column(
         children: [
-          CameraPreviewWidget(controller: _svc.controller!),
-          // dark overlay with transparent hole
-          Container(
-            color: Colors.black45,
-          ),
-          const FaceOverlayBox(),
-          Positioned(
-            top: 80,
-            left: 0,
-            right: 0,
-            child: const Center(
-              child: Text(
-                'Align your face inside the frame',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
+          // Top camera + overlay area
+          Expanded(
+            child: Stack(
+              children: [
+                // Live feed
+                if (_ready)
+                  CameraPreviewWidget(controller: _svc.controller!)
+                else
+                  const Center(child: CircularProgressIndicator()),
+                // Dark overlay
+                Positioned.fill(
+                  child: Container(color: Colors.black45),
                 ),
-              ),
+                // Oval cut-out
+                Center(
+                  child: ClipOval(
+                    child: Container(
+                      width: 260,
+                      height: 360,
+                      color: Colors.transparent,
+                    ),
+                  ),
+                ),
+                // Oval border
+                Center(
+                  child: Container(
+                    width: 260,
+                    height: 360,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white70, width: 3),
+                      borderRadius: BorderRadius.circular(180),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          Positioned(
-            bottom: 40,
-            left: 0,
-            right: 0,
-            child: CaptureButton(
-              isProcessing: _processing,
-              onCapture: _capture,
+
+          // Bottom sheet with instructions + capture
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Align your face inside the frame and press the button to enroll.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.black87),
+                ),
+                const SizedBox(height: 16),
+                // Big circular FAB
+                SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: FloatingActionButton(
+                    backgroundColor: Colors.blueAccent,
+                    onPressed: _processing ? null : _capture,
+                    child: _processing
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Icon(Icons.camera_alt, size: 32),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Tap to Capture',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                ),
+              ],
             ),
           ),
         ],

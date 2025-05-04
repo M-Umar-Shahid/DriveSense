@@ -36,6 +36,8 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   Interpreter? _seatbeltInterpreter;
   StreamSubscription? _frameSubscription;
   static const EventChannel _frameStream = EventChannel("flutter_mediapipe/frameStream");
+  int? _cameraViewId;
+
 
   late final FlutterTts _tts;
   String? _currentAlert;
@@ -451,63 +453,56 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
 
   Widget _buildCameraView() {
     return Center(
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Opacity(
-            opacity: _isAnalyzing ? 1.0 : 0.0,
-            child: SizedBox(
-              key: ValueKey(_cameraViewKey),
-              height: 500,
-              width: 300,
-              child: NativeView(
-                onViewCreated: (controller) {
-                  _mpController = controller;
-                  controller.landMarksStream.listen((landmarks) {
-                    if (_isAnalyzing) _onLandmarkStream(landmarks);
-                  });
-
-                  // ✅ Delay frame listening slightly to allow camera startup
-                  Future.delayed(const Duration(milliseconds: 500), () {
-                    if (mounted && _isAnalyzing) {
-                      _listenToFrameStream();
-                    }
-                  });
-                },
-              ),
+      child: _isAnalyzing
+      // ── CAMERA ACTIVE: show camera + overlays ───────────────────────
+          ? SizedBox(
+        key: ValueKey(_cameraViewKey),
+        height: 500,
+        width: 300,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            NativeView(
+              onViewCreated: (controller) {
+                _mpController = controller;
+                controller.landMarksStream.listen((landmarks) {
+                  if (_isAnalyzing) _onLandmarkStream(landmarks);
+                });
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  if (mounted && _isAnalyzing) _listenToFrameStream();
+                });
+              },
             ),
-          ),
-          if (_isAnalyzing)
             Positioned.fill(
               child: CustomPaint(
                 painter: SeatbeltBoxPainter(_noSeatbeltBoxes),
               ),
             ),
-          if (!_isAnalyzing)
-            Container(
-              height: 500,
-              width: 300,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.black,
-              ),
-              child: const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.camera_alt, color: Colors.grey, size: 100),
-                    SizedBox(height: 10),
-                    Text('Camera not active', style: TextStyle(color: Colors.white)),
-                  ],
-                ),
-              ),
-            ),
-        ],
+          ],
+        ),
+      )
+      // ── CAMERA INACTIVE: show placeholder ───────────────────────────
+          : Container(
+        height: 500,
+        width: 300,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: Colors.black,
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.camera_alt, color: Colors.grey, size: 100),
+              SizedBox(height: 10),
+              Text('Camera not active',
+                  style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
       ),
     );
   }
-
-
 
   Widget _statusIndicator(String label, Color color, double confidence) {
     return Column(

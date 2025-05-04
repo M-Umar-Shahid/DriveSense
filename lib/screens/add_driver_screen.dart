@@ -13,9 +13,9 @@ class AddDriverPage extends StatefulWidget {
 
 class _AddDriverPageState extends State<AddDriverPage> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameCtl = TextEditingController();
-  final TextEditingController _emailCtl = TextEditingController();
-  final TextEditingController _passwordCtl = TextEditingController();
+  final _nameCtl = TextEditingController();
+  final _emailCtl = TextEditingController();
+  final _passwordCtl = TextEditingController();
   bool _isLoading = false;
   final CompanyService _companyService = CompanyService();
 
@@ -31,13 +31,13 @@ class _AddDriverPageState extends State<AddDriverPage> {
       );
       final driverId = cred.user!.uid;
 
-      // 2) add driver UID to company's driverIds array
+      // 2) add driver to company
       await _companyService.addDriverToCompany(
         companyId: widget.companyId,
         driverId: driverId,
       );
 
-      // 3) add to users collection
+      // 3) save user data
       await FirebaseFirestore.instance
           .collection('users')
           .doc(driverId)
@@ -55,7 +55,7 @@ class _AddDriverPageState extends State<AddDriverPage> {
       Navigator.pop(context);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error adding driver: $e')),
+        SnackBar(content: Text('Error adding driver: \$e')),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -65,52 +65,142 @@ class _AddDriverPageState extends State<AddDriverPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Driver'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _nameCtl,
-                decoration: const InputDecoration(labelText: 'Driver Name'),
-                validator: (v) => v == null || v.isEmpty ? 'Enter name' : null,
+      backgroundColor: Colors.grey[100],
+      body: Column(
+        children: [
+          // Gradient header
+          Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF4285F4), Color(0xFF1976D2)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _emailCtl,
-                decoration: const InputDecoration(labelText: 'Driver Email'),
-                keyboardType: TextInputType.emailAddress,
-                validator: (v) => v == null || !v.contains('@') ? 'Enter valid email' : null,
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(32),
+                bottomRight: Radius.circular(32),
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _passwordCtl,
-                decoration: const InputDecoration(labelText: 'Temporary Password'),
-                obscureText: true,
-                validator: (v) => v == null || v.length < 6 ? 'Min 6 chars' : null,
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _submit,
-                  child: _isLoading
-                      ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                      : const Text('Add Driver'),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                child: Row(
+                  children: [
+                    // back
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Add New Driver',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
+          // Form
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 4,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildField(
+                          controller: _nameCtl,
+                          label: 'Driver Name',
+                          icon: Icons.person,
+                          validator: (v) => v == null || v.isEmpty ? 'Enter name' : null,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildField(
+                          controller: _emailCtl,
+                          label: 'Email Address',
+                          icon: Icons.email,
+                          keyboardType: TextInputType.emailAddress,
+                          validator: (v) => v == null || !v.contains('@') ? 'Enter valid email' : null,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildField(
+                          controller: _passwordCtl,
+                          label: 'Temporary Password',
+                          icon: Icons.lock,
+                          obscureText: true,
+                          validator: (v) => v == null || v.length < 6 ? 'Min 6 chars' : null,
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            foregroundColor: Colors.white, backgroundColor: const Color(0xFF1976D2),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: _isLoading ? null : _submit,
+                          child: _isLoading
+                              ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                              : const Text('Add Driver', style: TextStyle(fontSize: 16)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType? keyboardType,
+    bool obscureText = false,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      obscureText: obscureText,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        filled: true,
+        fillColor: Colors.grey[50],
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
         ),
       ),
+      validator: validator,
     );
   }
 }
