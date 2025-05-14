@@ -54,8 +54,8 @@ flutter:
   assets:
     - assets/images/
     - assets/animations/
-    - assets/models/distraction_model.tflite
     - assets/models/seatbelt.tflite
+    - assets/models/distraction.tflite
     - assets/models/mobilefacenet.tflite
 
   fonts:

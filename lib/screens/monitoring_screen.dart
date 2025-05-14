@@ -12,8 +12,89 @@ import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
+import '../utils/distraction_detector.dart';
 import 'dashboard_screen.dart';
 
+
+// ── 1) Constants ───────────────────────────────────────────
+const int maxDet = 8400; // number of anchor/grid detections in your YOLO export
+const double detectionThreshold = 0.5;
+Size _imageSize = Size.zero;
+
+
+class BeltTrack {
+  final int id;
+  Rect box;
+  int missed = 0;
+  BeltTrack(this.id, this.box);
+}
+
+class MiniSort {
+  List<BeltTrack> tracks = [];
+  int _nextId = 0;
+  static const double iouThresh = 0.3;
+  static const int maxMissed = 5;
+
+  List<BeltTrack> update(List<Rect> dets) {
+    final matched = <int,int>{};
+
+    // 1) build IoU matrix
+    final iou = List.generate(tracks.length, (i) =>
+        List.generate(dets.length, (j) => _iou(tracks[i].box, dets[j]))
+    );
+
+    // 2) greedy match
+    while (true) {
+      double best = 0; int ti = -1, di = -1;
+      for (var i = 0; i < tracks.length; i++) {
+        for (var j = 0; j < dets.length; j++) {
+          if (!matched.containsKey(i) &&
+              !matched.containsValue(j) &&
+              iou[i][j] > best) {
+            best = iou[i][j];
+            ti = i;
+            di = j;
+          }
+        }
+      }
+      if (best < iouThresh) break;
+      matched[ti] = di;
+    }
+
+    // 3) update / age
+    for (var i = 0; i < tracks.length; i++) {
+      if (matched.containsKey(i)) {
+        tracks[i].box = dets[matched[i]!];
+        tracks[i].missed = 0;
+      } else {
+        tracks[i].missed++;
+      }
+    }
+
+    // 4) prune old
+    tracks.removeWhere((t) => t.missed > maxMissed);
+
+    // 5) spawn new
+    for (var j = 0; j < dets.length; j++) {
+      if (!matched.containsValue(j)) {
+        tracks.add(BeltTrack(_nextId++, dets[j]));
+      }
+    }
+
+    return tracks;
+  }
+
+  double _iou(Rect a, Rect b) {
+    final inter = a.intersect(b);
+    if (inter.isEmpty) return 0.0;
+    final union = a.area + b.area - inter.area;
+    return inter.area / union;
+  }
+}
+
+extension on Rect {
+  double get area => width * height;
+}
 
 class MonitoringPage extends StatefulWidget {
   const MonitoringPage({Key? key}) : super(key: key);
@@ -37,15 +118,23 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   StreamSubscription? _frameSubscription;
   static const EventChannel _frameStream = EventChannel("flutter_mediapipe/frameStream");
   int? _cameraViewId;
+  final _detector = DistractionDetector();
+  bool _modelLoaded = false;
+  bool _isDistracted = false;
+
+  // In your _MonitoringPageState:
+  final _tracker = MiniSort();
+
 
 
   late final FlutterTts _tts;
   String? _currentAlert;
   final Map<String, DateTime> _lastSpoken = {};
   final Map<String, Duration> _cooldowns = {
-    'drowsy':   Duration(minutes: 1),
-    'yawning':  Duration(minutes: 1),
-    'seatbelt': Duration(seconds: 30),
+    'seatbelt':   Duration(seconds: 30),
+    'distraction':Duration(seconds: 30),
+    'drowsy':     Duration(minutes: 1),
+    'yawning':    Duration(minutes: 1),
   };
 
 
@@ -67,6 +156,10 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadSeatbeltModel();
+    _detector.loadModel().then((_) {
+      _modelLoaded = true;
+      debugPrint('✅ Distraction model loaded');
+    });
 
     _tts = FlutterTts()
       ..setLanguage("en-US")
@@ -81,19 +174,26 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     _currentAlert = null;
   }
 
-
   void _updateAlertSpeech() {
-    // 1️⃣ Pick the highest-priority active alert:
+    // 1️⃣ Pick the highest‐priority active alert:
     String? next;
-    if (_isDrowsy) {
+
+    // ── Seatbelt highest ────────────────────────────────────
+    if (_noSeatbelt) {
+      next = 'seatbelt';
+    }
+    // ── Then distraction ───────────────────────────────────
+    else if (_isDistracted) {
+      next = 'distraction';
+    }
+    // ── Then drowsy/yawning ────────────────────────────────
+    else if (_isDrowsy) {
       next = 'drowsy';
     } else if (_isYawning) {
       next = 'yawning';
-    } else if (_noSeatbelt) {
-      next = 'seatbelt';
     }
 
-    // 2️⃣ If nothing’s active, stop speaking and clear state:
+    // 2️⃣ If nothing’s active, stop speaking:
     if (next == null) {
       _currentAlert = null;
       _tts.stop();
@@ -103,29 +203,27 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     // 3️⃣ Don’t re-speak the same alert if it’s still playing:
     if (_currentAlert == next) return;
 
-    // 4️⃣ Enforce per-alert cooldown so we don’t spam:
+    // 4️⃣ Enforce per-alert cooldown:
     final now      = DateTime.now();
     final lastTime = _lastSpoken[next];
     final cooldown = _cooldowns[next]!;
-    if (lastTime != null && now.difference(lastTime) < cooldown) {
-      return;
-    }
+    if (lastTime != null && now.difference(lastTime) < cooldown) return;
 
     // 5️⃣ Build the message for this alert:
     final messages = {
-      'drowsy':  'Alert: Drowsiness detected. Please stay focused.',
-      'yawning': 'Alert: You are yawning. Please remain attentive.',
-      'seatbelt':'Warning: No seatbelt detected. Please buckle up.'
+      'seatbelt':    'Warning: No seatbelt detected. Please buckle up.',
+      'distraction': 'Warning: Distraction detected. Keep your eyes on the road.',
+      'drowsy':      'Alert: Drowsiness detected. Please stay focused.',
+      'yawning':     'Alert: You are yawning. Please remain attentive.',
     };
     final msg = messages[next]!;
 
-    // 6️⃣ Record and speak
-    _currentAlert      = next;
-    _lastSpoken[next]  = now;
+    // 6️⃣ Record and speak:
+    _currentAlert     = next;
+    _lastSpoken[next] = now;
     _tts.stop();
     _tts.speak(msg);
   }
-
 
   @override
   void dispose() {
@@ -181,11 +279,19 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   Future<void> _loadSeatbeltModel() async {
     _seatbeltInterpreter = await Interpreter.fromAsset('assets/models/seatbelt.tflite');
     debugPrint('✅ Seatbelt model loaded');
+    // ← Trigger a rebuild so the button sees the non-null interpreter
+    if (mounted) setState(() {});
   }
 
   Future<void> toggleAnalyzing() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+
+
+    if (_seatbeltInterpreter == null) {
+      // This will load, resize, allocate, and set _seatbeltInterpreter
+      await _loadSeatbeltModel();
+    }
 
     if (!_isAnalyzing) {
       // ── START ANALYSIS ─────────────────────────────────────────
@@ -240,17 +346,60 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
 
 
   void _listenToFrameStream() {
-    _frameSubscription = _frameStream.receiveBroadcastStream().listen((event) {
+    _frameSubscription = _frameStream
+        .receiveBroadcastStream()
+        .listen((event) async {
       if (!_isAnalyzing) return;
+
       if (event is Uint8List) {
         final image = img.decodeImage(event);
-        if (image != null) {
-          // ← store the latest frame
-          _lastFrameImage = image;
-          _runSeatbeltDetection(event, image);
+        if (image == null) {
+          print('⚠️ Failed to decode image');
+          return;
         }
+
+        _lastFrameImage = image;
+
+        setState(() {
+          _imageSize = Size(
+            image.width.toDouble(),
+            image.height.toDouble(),
+          );
+        });
+
+        // 1️⃣ Run your seatbelt detector
+        await _runSeatbeltDetection(event, image);
+
+        // 2️⃣ Then, if your distraction model is loaded, run it too
+        if (_modelLoaded) {
+          await _runDistractionDetection(image);
+        }
+      } else {
+        print('⚠️ Unexpected frame type: ${event.runtimeType}');
       }
+    }, onError: (e) {
+      print('⚠️ FrameStream error: $e');
     });
+  }
+
+  Future<void> _runDistractionDetection(img.Image frame) async {
+    // 1️⃣ Run the detector
+    final dets = _detector.detect(
+      frame,
+      confThreshold: 0.4,
+      iouThreshold: 0.5,
+    );
+
+    final distracted = dets.isNotEmpty;
+    setState(() => _isDistracted = distracted);
+
+    // 2️⃣ Speech alert
+    if (distracted && _canSave('distraction', cooldown: Duration(seconds: 30))) {
+      _addRecentAlert('Distraction detected');
+      await _saveDetectionSnapshot(image: frame, alertType: 'Distraction');
+    }
+
+    _updateAlertSpeech();
   }
 
 
@@ -258,69 +407,74 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   Future<void> _runSeatbeltDetection(Uint8List frameBytes, img.Image thisFrame) async {
     if (_seatbeltInterpreter == null) return;
 
-    // 1. Preprocess & run inference
-    final input = _preprocessImage(frameBytes);
+    // 1️⃣ Preprocess & run inference (implicitly allocates once)
+    final input  = _preprocessImage(frameBytes);
     final output = List.generate(1, (_) => List.generate(5, (_) => List.filled(8400, 0.0)));
     _seatbeltInterpreter!.run(input, output);
 
-    // 2. Pull out the no-seatbelt confidences (8400 values)
-    final noSeatbeltConfs = output[0][4];
+    // 2️⃣ Split out the xywh+conf
+    final raw    = output[0];
+    final cxArr  = raw[0];
+    final cyArr  = raw[1];
+    final wArr   = raw[2];
+    final hArr   = raw[3];
+    final cfArr  = raw[4];
 
-    // 3. Compute the average confidence
-    final double sum    = noSeatbeltConfs.fold(0.0, (acc, c) => acc + c);
-    final double avgConf = sum / noSeatbeltConfs.length;
-
-    // 4. Compare against your threshold
-    const double seatbeltAvgThreshold = 0.3;  // tune this as needed
-    final bool detectedNoSeatbelt = avgConf > seatbeltAvgThreshold;
-
-    // 5. Log it
-    print("➡ Average no-seatbelt conf = ${avgConf.toStringAsFixed(3)} "
-        "(threshold = ${seatbeltAvgThreshold.toStringAsFixed(3)})");
-
-    // 6. Update UI / save snapshot if needed, using the passed-in thisFrame
-    if (detectedNoSeatbelt && _canSave("NoSeatbelt")) {
-      setState(() => _noSeatbelt = true);
-      _updateAlertSpeech();
-      _addRecentAlert("No Seatbelt");
-      await _saveDetectionSnapshot(
-        image: thisFrame,          // ← use the local frame copy here
-        alertType: "No Seatbelt",
-      );
-    } else {
-      if (_noSeatbelt) setState(() => _noSeatbelt = false);
-      _updateAlertSpeech();
-    }
-  }
-
-
-  List<List<List<List<double>>>> _preprocessImage(Uint8List imageBytes) {
-    final originalImage = img.decodeImage(imageBytes);
-    if (originalImage == null) throw Exception("Unable to decode image.");
-
-    final resizedImage = img.copyResize(originalImage, width: 640, height: 640);
-
-    List<List<List<List<double>>>> batch = List.generate(
-      1,
-          (_) => List.generate(
-        640,
-            (_) => List.generate(
-          640,
-              (_) => List.filled(3, 0.0),
-        ),
-      ),
-    );
-
-    for (int y = 0; y < 640; y++) {
-      for (int x = 0; x < 640; x++) {
-        final pixel = resizedImage.getPixel(x, y);
-        batch[0][y][x][0] = pixel.getChannel(img.Channel.red).toDouble();    // 🔥 Notice: No divide by 255.0 now
-        batch[0][y][x][1] = pixel.getChannel(img.Channel.green).toDouble();
-        batch[0][y][x][2] = pixel.getChannel(img.Channel.blue).toDouble();
+    // 3️⃣ Build detection rects
+    final dets = <Rect>[];
+    final fW   = thisFrame.width.toDouble();
+    final fH   = thisFrame.height.toDouble();
+    for (var i = 0; i < 8400; i++) {
+      if (cfArr[i] > detectionThreshold) {
+        dets.add(Rect.fromCenter(
+          center: Offset(cxArr[i] * fW, cyArr[i] * fH),
+          width:  wArr[i] * fW,
+          height: hArr[i] * fH,
+        ));
       }
     }
 
-    return batch;
+    // 4️⃣ Track via MiniSort
+    final tracks = _tracker.update(dets);
+
+    // 5️⃣ Update UI
+    setState(() {
+      _noSeatbeltBoxes = tracks.map((t) => t.box).toList();
+      _noSeatbelt      = tracks.isEmpty;
+    });
+    _updateAlertSpeech();
+
+    // 7️⃣ Snapshot on violation
+    if (_canSave("NoSeatbelt")) {
+      _addRecentAlert("No Seatbelt");
+      await _saveDetectionSnapshot(
+        image:     thisFrame,
+        alertType: "No Seatbelt",
+      );
+    }
+  }
+
+  List<List<List<List<double>>>> _preprocessImage(Uint8List imageBytes) {
+    final original = img.decodeImage(imageBytes)!;
+    final resized  = img.copyResize(original, width: 640, height: 640);
+
+    // batch of 1 × 640 × 640 × 3
+    return List.generate(1, (_) =>
+        List.generate(640, (_) =>
+            List.generate(640, (_) =>
+                List.filled(3, 0.0),
+            ),
+        ),
+    )..forEach((batch) {
+      for (var y = 0; y < 640; y++) {
+        for (var x = 0; x < 640; x++) {
+          final px = resized.getPixel(x, y);
+          batch[y][x][0] = px.getChannel(img.Channel.red)   / 255.0;
+          batch[y][x][1] = px.getChannel(img.Channel.green) / 255.0;
+          batch[y][x][2] = px.getChannel(img.Channel.blue)  / 255.0;
+        }
+      }
+    });
   }
 
 
@@ -475,7 +629,10 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
             ),
             Positioned.fill(
               child: CustomPaint(
-                painter: SeatbeltBoxPainter(_noSeatbeltBoxes),
+                painter: SeatbeltBoxPainter(
+                  boxes:     _noSeatbeltBoxes,
+                  imageSize: _imageSize,
+                ),
               ),
             ),
           ],
@@ -569,7 +726,9 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
                 const SizedBox(height: 20),
                 Center(
                   child: ElevatedButton(
-                    onPressed: toggleAnalyzing,
+                    onPressed: (_seatbeltInterpreter != null || _isAnalyzing)
+                        ? toggleAnalyzing
+                        : null,  // disabled while _seatbeltInterpreter is null
                     child: Text(_isAnalyzing ? 'Stop Analyzing' : 'Start Analyzing'),
                   ),
                 ),
@@ -584,6 +743,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
                         _mouthOpenness > 0.2 ? Colors.red : Colors.green,
                         _mouthOpenness.clamp(0.0, 1.0)),
                     _statusIndicator('Seatbelt', _noSeatbelt ? Colors.red : Colors.green, 1),
+                    _statusIndicator(_isDistracted ? 'Distracted' : 'Focused', _isDistracted ? Colors.red : Colors.green, _isDistracted ? 1.0 : 0.0),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -605,23 +765,42 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
 }
 
 class SeatbeltBoxPainter extends CustomPainter {
-  final List<Rect> boxes;
-  SeatbeltBoxPainter(this.boxes);
+  final List<Rect> boxes;     // in raw image coords
+  final Size imageSize;       // e.g. camera.previewSize
+
+  SeatbeltBoxPainter({
+    required this.boxes,
+    required this.imageSize,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
+    // how much to stretch x/y from image → widget
+    final double scaleX = size.width  / imageSize.width;
+    final double scaleY = size.height / imageSize.height;
+
     final paint = Paint()
       ..color = Colors.red.withOpacity(0.6)
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke;
 
     for (final box in boxes) {
-      canvas.drawRect(box, paint);
+      // scale each corner
+      final rect = Rect.fromLTRB(
+        box.left   * scaleX,
+        box.top    * scaleY,
+        box.right  * scaleX,
+        box.bottom * scaleY,
+      );
+      canvas.drawRect(rect, paint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant SeatbeltBoxPainter oldDelegate) {
-    return oldDelegate.boxes != boxes;
+  bool shouldRepaint(covariant SeatbeltBoxPainter old) {
+    // repaint whenever the box list changes
+    return old.boxes    != boxes
+        || old.imageSize != imageSize;
+
   }
 }
