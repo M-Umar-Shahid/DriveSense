@@ -10,23 +10,26 @@ import 'face_recognition_screen.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
-
   @override
   State<SignUpPage> createState() => _SignUpPageState();
 }
 
 class _SignUpPageState extends State<SignUpPage> {
-  bool _isCompanyAdmin = false;
-  bool _openToWork = false;
-  bool _isLoading = false;
-  final _companyNameController = TextEditingController();
-  final _companyService = CompanyService();  // ← import and instantiate
-  final _nameController            = TextEditingController();
-  final _emailController           = TextEditingController();
-  final _passwordController        = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
+  bool  _isCompanyAdmin        = false;
+  bool  _openToWork            = false;
+  bool  _isLoading             = false;
+  bool  _showPassword          = false;
+  bool  _showConfirmPassword   = false;
+  String? _error;
 
-  final _authService = AuthService();
+  final _companyNameController    = TextEditingController();
+  final _nameController           = TextEditingController();
+  final _emailController          = TextEditingController();
+  final _passwordController       = TextEditingController();
+  final _confirmPasswordController= TextEditingController();
+
+  final _authService    = AuthService();
+  final _companyService = CompanyService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   /// This will be called once face enrollment completes successfully.
@@ -223,7 +226,7 @@ class _SignUpPageState extends State<SignUpPage> {
       }
     }
     finally {
-        if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -231,186 +234,332 @@ class _SignUpPageState extends State<SignUpPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () => Navigator.pop(context),
+      // ▶ full-screen gradient
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.blue, // swap for your brand
+              Color(0xFF4776E6),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 20),
+              // ▶ App title
+              const Text(
+                'DriveSense',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
-                const SizedBox(height: 20),
-                const Text('Create your account',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                const Text('Sign Up',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.blueAccent),
-                ),
-                const SizedBox(height: 8),
-                const Text('Enter the details below to create your account',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-                const SizedBox(height: 30),
+              ),
+              const SizedBox(height: 30),
 
-                // --- Role selector ---
-                Row(
-                  children: [
-                    Radio<bool>(
-                      fillColor: MaterialStateProperty.resolveWith((states) => Colors.blueAccent),
-                      value: false,
-                      groupValue: _isCompanyAdmin,
-                      onChanged: (v) => setState(() => _isCompanyAdmin = v!),
+              // ▶ white rounded card
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
                     ),
-                    const Text('Driver'),
-                    Radio<bool>(
-                      fillColor: MaterialStateProperty.resolveWith((states) => Colors.blueAccent),
-                      value: true,
-                      groupValue: _isCompanyAdmin,
-                      onChanged: (v) => setState(() => _isCompanyAdmin = v!),
-                    ),
-                    const Text('Company Admin'),
-                  ],
-                ),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          // ▶ headers
+                          const Text(
+                            'Get Started',
+                            style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Create a new account',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
 
-                // Conditionally show company-name input
-                if (_isCompanyAdmin) ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _companyNameController,
-                    decoration: InputDecoration(
-                      labelText: 'Company Name',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
+                          // ▶ role selector
+                          Row(
+                            children: [
+                              Radio<bool>(
+                                fillColor: MaterialStateProperty.all(Colors.blue),
+                                value: false,
+                                groupValue: _isCompanyAdmin,
+                                onChanged: (v) => setState(() => _isCompanyAdmin = v!),
+                              ),
+                              const Text('Driver'),
+                              Radio<bool>(
+                                fillColor: MaterialStateProperty.all(Colors.blue),
+                                value: true,
+                                groupValue: _isCompanyAdmin,
+                                onChanged: (v) => setState(() => _isCompanyAdmin = v!),
+                              ),
+                              const Text('Company Admin'),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
 
+                          // ▶ company name if needed
+                          if (_isCompanyAdmin) ...[
+                            TextField(
+                              controller: _companyNameController,
+                              decoration: InputDecoration(
+                                hintText: 'Company Name',
+                                filled: true,
+                                fillColor: const Color(0xFFF5F6FA),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(50),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 18, horizontal: 20),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
 
-                TextField(
-                  controller: _nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Name',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-                const SizedBox(height: 20),
+                          // ▶ name
+                          TextField(
+                            controller: _nameController,
+                            decoration: InputDecoration(
+                              hintText: 'Name',
+                              filled: true,
+                              fillColor: const Color(0xFFF5F6FA),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(50),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 18, horizontal: 20),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
 
-                TextField(
-                  controller: _emailController,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-                const SizedBox(height: 20),
+                          // ▶ email
+                          TextField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: InputDecoration(
+                              hintText: 'Email',
+                              filled: true,
+                              fillColor: const Color(0xFFF5F6FA),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(50),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 18, horizontal: 20),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
 
-                TextField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    hintText: 'At least 6 characters',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-                const SizedBox(height: 20),
+                          // ▶ password
+                          TextField(
+                            controller: _passwordController,
+                            obscureText: !_showPassword,
+                            decoration: InputDecoration(
+                              hintText: 'Password',
+                              filled: true,
+                              fillColor: const Color(0xFFF5F6FA),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(50),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 18, horizontal: 20),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _showPassword
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                ),
+                                onPressed: () => setState(
+                                        () => _showPassword = !_showPassword),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
 
-                TextField(
-                  controller: _confirmPasswordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'Confirm Password',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-                const SizedBox(height: 30),
+                          // ▶ confirm password
+                          TextField(
+                            controller: _confirmPasswordController,
+                            obscureText: !_showConfirmPassword,
+                            decoration: InputDecoration(
+                              hintText: 'Confirm Password',
+                              filled: true,
+                              fillColor: const Color(0xFFF5F6FA),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(50),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 18, horizontal: 20),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _showConfirmPassword
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                ),
+                                onPressed: () => setState(() =>
+                                _showConfirmPassword =
+                                !_showConfirmPassword),
+                              ),
+                            ),
+                          ),
 
-                // Only show “Open to work?” when registering as DRIVER
-                if (!_isCompanyAdmin) ...[
-                  Row(
-                    children: [
-                      Checkbox(
-                        fillColor: MaterialStateProperty.resolveWith((states) => Colors.transparent),
-                        value: _openToWork,
-                        onChanged: (v) => setState(() => _openToWork = v!),
-                        checkColor: Colors.blueAccent,
+                          // ▶ open-to-work
+                          if (!_isCompanyAdmin) ...[
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Checkbox(
+                                  fillColor:
+                                  MaterialStateProperty.all(Colors.blue),
+                                  value: _openToWork,
+                                  onChanged: (v) =>
+                                      setState(() => _openToWork = v!),
+                                ),
+                                const Expanded(
+                                  child: Text(
+                                    'I am open to work (companies can view my stats)',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+
+                          // ▶ error message
+                          if (_error != null) ...[
+                            const SizedBox(height: 12),
+                            Text(_error!,
+                                style: const TextStyle(color: Colors.red)),
+                          ],
+                          const SizedBox(height: 20),
+
+                          // ▶ Sign Up button
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                Colors.blue, // accent
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(50),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 18),
+                              ),
+                              onPressed:
+                              _isLoading ? null : () => _signUp(),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2),
+                              )
+                                  : const Text('Sign Up',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // ▶ Or sign up with
+                          const Row(
+                            children: [
+                              const Expanded(child: Divider()),
+                              Padding(
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 8),
+                                child: Text('Or sign up with'),
+                              ),
+                              Expanded(child: Divider()),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
+                          // ▶ Continue with Google
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              icon: Image.asset(
+                                'assets/images/google-logo.png',
+                                width: 24,
+                                height: 24,
+                              ),
+                              label: const Text('Continue with Google'),
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                side: const BorderSide(
+                                    color: Color(0xFFE0E0E0)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(50),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 14),
+                              ),
+                              onPressed: _isLoading
+                                  ? null
+                                  : () => _signUpWithGoogle(),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+
+                          // ▶ already have account?
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text(
+                                "Already have an account? ",
+                                style:
+                                TextStyle(color: Colors.black54),
+                              ),
+                              GestureDetector(
+                                onTap: () => Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                      const LoginPage()),
+                                ),
+                                child: const Text(
+                                  'Sign In here',
+                                  style: TextStyle(
+                                      color: Colors.blue,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      const Expanded(
-                        child: Text("I am open to work (companies can view my stats)"),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                ],
-
-                const SizedBox(height: 20),
-
-                ElevatedButton(
-                  onPressed: _signUp,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1976D2),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  child: const Center(
-                    child: Text('Sign Up',
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
-
-                Center(
-                  child: ElevatedButton.icon(
-                    onPressed: _signUpWithGoogle,
-                    icon: Image.asset(
-                      'assets/images/google-logo.png',
-                      width: 24, height: 24,
-                    ),
-                    label: const Text('Sign Up with Google'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: const BorderSide(color: Colors.grey),
-                      ),
-                    ),
-                  ),
-                ),
-
-
-                Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('Already have an account? ',
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const LoginPage()),
-                        ),
-                        child: const Text('Login',
-                          style: TextStyle(fontSize: 16, color: Color(0xFF1976D2)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

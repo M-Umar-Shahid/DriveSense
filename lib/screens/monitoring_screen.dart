@@ -17,7 +17,7 @@ import 'dashboard_screen.dart';
 
 
 // ── 1) Constants ───────────────────────────────────────────
-const int maxDet = 8400; // number of anchor/grid detections in your YOLO export
+const int maxDet = 8400;
 const double detectionThreshold = 0.5;
 Size _imageSize = Size.zero;
 

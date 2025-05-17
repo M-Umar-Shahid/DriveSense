@@ -5,38 +5,44 @@ class MetricCard extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
+
   const MetricCard({
     required this.icon,
     required this.label,
     required this.value,
     required this.color,
-    super.key
+    super.key,
   });
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.symmetric(vertical: 8.0),
-      padding: EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
       decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(color: color.withOpacity(0.1), blurRadius: 12, offset: Offset(0, 4))
-          ]
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: color.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 6))
+        ],
       ),
       child: Row(
         children: [
-          CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color)),
-          SizedBox(width: 16),
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: color.withOpacity(0.1),
+            child: Icon(icon, color: color, size: 28),
+          ),
+          const SizedBox(width: 16),
           Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black54)),
-                  SizedBox(height: 4),
-                  Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ],
-              )
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black54)),
+                const SizedBox(height: 4),
+                Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
           ),
         ],
       ),

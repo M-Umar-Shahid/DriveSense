@@ -10,7 +10,7 @@ class SummaryBox extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.iconColor,
-    super.key
+    super.key,
   });
   @override
   Widget build(BuildContext context) {

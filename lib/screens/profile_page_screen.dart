@@ -2,12 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drivesense/screens/login_signup_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import 'edit_profile_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -16,19 +16,50 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> with RouteAware{
+class _ProfilePageState extends State<ProfilePage>
+    with SingleTickerProviderStateMixin {
   final user = FirebaseAuth.instance.currentUser;
   String? _imageUrl;
   bool _audioAlertsEnabled = true;
   bool _openToWork = false;
 
+  late AnimationController _animationController;
+  late Animation<double> _profileAnimation;
+  late Animation<double> _menuAnimation;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
+    // Animations
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+    _profileAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+      ),
+    );
+    _menuAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeOut),
+      ),
+    );
+    _animationController.forward();
+
+    // Load saved user data
     _loadUserData();
     _loadOpenToWork();
+    _loadAudioToggle();
+  }
 
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUserData() async {
@@ -40,17 +71,17 @@ class _ProfilePageState extends State<ProfilePage> with RouteAware{
   }
 
   Future<void> _loadOpenToWork() async {
-        if (user != null) {
-          final doc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user!.uid)
-              .get();
-          if (doc.exists) {
-            setState(() => _openToWork = doc.data()?['openToWork'] as bool? ?? false);
-          }
-        }
+    if (user != null) {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user!.uid)
+          .get();
+      if (doc.exists) {
+        setState(
+                () => _openToWork = doc.data()?['openToWork'] as bool? ?? false);
       }
-
+    }
+  }
 
   Future<void> _loadAudioToggle() async {
     final prefs = await SharedPreferences.getInstance();
@@ -64,273 +95,305 @@ class _ProfilePageState extends State<ProfilePage> with RouteAware{
     prefs.setBool('audio_alerts', value);
   }
 
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
-  }
-
-  @override
-  void dispose() {
-    routeObserver.unsubscribe(this);
-    super.dispose();
-  }
-
-  @override
-  void didPopNext() {
-    // Called when returning to this screen
-    _loadUserData(); // Re-fetch name & photo
-  }
-
-
   Future<void> _pickAndUploadImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    try {
+      final XFile? pickedFile =
+      await _picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile == null) return;
 
-    if (pickedFile != null) {
-      var user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        final credential = await FirebaseAuth.instance.signInAnonymously();
-        user = credential.user;
+      var currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        final cred = await FirebaseAuth.instance.signInAnonymously();
+        currentUser = cred.user;
       }
 
-      final fileBytes = await pickedFile.readAsBytes();
-      final fileName = "profile_pictures/${user!.uid}.jpg";
-      final ref = FirebaseStorage.instance.ref().child(fileName);
+      final bytes = await pickedFile.readAsBytes();
+      final path = 'profile_pictures/${currentUser!.uid}.jpg';
+      final ref = FirebaseStorage.instance.ref().child(path);
+      await ref.putData(bytes);
+      final url = await ref.getDownloadURL();
 
-      await ref.putData(fileBytes);
-      final downloadUrl = await ref.getDownloadURL();
+      await currentUser.updatePhotoURL(url);
+      await currentUser.reload();
+      setState(() => _imageUrl = url);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking image: $e')),
+        );
+      }
+    }
+  }
 
-      await user.updatePhotoURL(downloadUrl);
-      await user.reload();
-      setState(() => _imageUrl = downloadUrl);
+  Future<void> _showLogoutDialog() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Confirm Logout'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Logout', style: TextStyle(color: Colors.blue)),
+          ),
+        ],
+      ),
+    );
+    if (shouldLogout == true) {
+      await FirebaseAuth.instance.signOut();
+      Navigator.of(context)
+          .pushReplacement(MaterialPageRoute(builder: (_) => const LoginSignupPage()));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final String name = user?.displayName ?? "No Name";
-    final String email = user?.email ?? "No Email";
+    // enforce light status bar icons on grey background
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ));
+
+    final displayName = user?.displayName ?? 'No Name';
+    final email = user?.email ?? 'No Email';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FC),
+      backgroundColor: Colors.grey[50],
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Back Button and Title
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back, size: 28.0, color: Colors.black54),
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            // Profile Header
+            SliverToBoxAdapter(
+              child: AnimatedBuilder(
+                animation: _profileAnimation,
+                builder: (context, child) => Opacity(
+                  opacity: _profileAnimation.value,
+                  child: Transform.translate(
+                    offset: Offset(0, 20 * (1 - _profileAnimation.value)),
+                    child: child,
                   ),
-                  const SizedBox(width: 10.0),
-                  const Text(
-                    "Profile",
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 22.0,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Profile Section
-            Center(
-              child: Column(
-                children: [
-                  Stack(
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 30, 20, 20),
+                  child: Column(
                     children: [
-                      CircleAvatar(
-                        radius: 60.0,
-                        backgroundImage: _imageUrl != null
-                            ? NetworkImage(_imageUrl!)
-                            : const AssetImage('assets/images/profile.jpg') as ImageProvider,
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 4,
-                        child: GestureDetector(
-                          onTap: _pickAndUploadImage,
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.blueAccent,
+                      // Avatar with gradient border
+                      GestureDetector(
+                        onTap: _pickAndUploadImage,
+                        child: Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.blue.shade400,
+                                Colors.blue.shade600
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
                             ),
-                            padding: const EdgeInsets.all(6.0),
-                            child: const Icon(Icons.edit, size: 18.0, color: Colors.white),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.blue.withOpacity(0.3),
+                                blurRadius: 15,
+                                offset: const Offset(0, 5),
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4.0),
+                            child: CircleAvatar(
+                              backgroundColor: Colors.white,
+                              child: ClipOval(
+                                child: _imageUrl != null
+                                    ? Image.network(
+                                  _imageUrl!,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                )
+                                    : const Icon(
+                                  Icons.person,
+                                  size: 40,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 10.0),
-                  Text(
-                    name,
-                    style: const TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 18.0,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 5.0),
-                  Text(
-                    email,
-                    style: const TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 14.0,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-            ),
 
-            const SizedBox(height: 30.0),
+                      const SizedBox(height: 24),
 
-            // Settings List
-            Expanded(
-              child: ListView(
-                children: [
-              // ─── New Open to work switch ───
-                                SwitchListTile(
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                  title: const Text(
-                                    "Open to work",
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 16.0,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.black87,
-                                    ),
+                      // Name
+                      Text(
+                        displayName,
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[800],
+                          shadows: [
+                            Shadow(
+                              blurRadius: 3,
+                              color: Colors.black.withOpacity(0.1),
+                              offset: const Offset(0, 1),
                             ),
-                        secondary: const Icon(Icons.work_outline, color: Colors.black87),
-                        activeColor: Colors.blueAccent,
-                        value: _openToWork,
-                        onChanged: (val) async {
-                          setState(() => _openToWork = val);
-                          // persist immediately
-                          await FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(user!.uid)
-                              .update({'openToWork': val});
-                        },
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 20),
-                  SwitchListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    title: const Text(
-                      "Audio Alerts",
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 16.0,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    secondary: const Icon(Icons.volume_up, color: Colors.black87),
-                    activeColor: Colors.blueAccent, // Color of the thumb when enabled
-                    activeTrackColor: Colors.blueAccent.withOpacity(0.3), // Track color when enabled
-                    inactiveThumbColor: Colors.grey, // Thumb when off
-                    inactiveTrackColor: Colors.grey.shade300, // Track when off
-                    value: _audioAlertsEnabled,
-                    onChanged: (value) {
-                      setState(() => _audioAlertsEnabled = value);
-                      // Save if needed
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  _settingsItem(
-                    title: "Edit Profile",
-                    icon: Icons.person,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const EditProfilePage()),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  _settingsItem(
-                    title: "Change Password",
-                    icon: Icons.lock,
-                    onTap: () async {
-                      final email = FirebaseAuth.instance.currentUser?.email;
-                      if (email != null) {
-                        await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Password reset email sent!')),
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('No email available to reset password.')),
-                        );
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  _settingsItem(
-                    title: "About DriveSense",
-                    icon: Icons.info,
-                    onTap: () {
-                      showAboutDialog(
-                        context: context,
-                        applicationName: "DriveSense",
-                        applicationVersion: "v1.0.0",
-                        applicationLegalese: "© 2025 DriveSense Inc.",
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  _settingsItem(
-                    title: "Logout",
-                    icon: Icons.logout,
-                    color: Colors.red,
-                    onTap: () async {
-                      final shouldLogout = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text("Confirm Logout"),
-                          content: const Text("Are you sure you want to log out?"),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text("Cancel"),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const LoginSignupPage(),
-                                ),
-                              ),
-                              child: const Text(
-                                "Logout",
-                                style: TextStyle(color: Colors.red),
+
+                      const SizedBox(height: 8),
+
+                      // Email pill
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.email_outlined,
+                                size: 16, color: Colors.grey[600]),
+                            const SizedBox(width: 8),
+                            Text(
+                              email,
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey[600],
                               ),
                             ),
                           ],
                         ),
-                      );
-
-                      if (shouldLogout == true) {
-                        await FirebaseAuth.instance.signOut();
-                        if (context.mounted) {
-                          Navigator.popUntil(context, (route) => route.isFirst);
-                        }
-                      }
-                    },
+                      ),
+                    ],
                   ),
-                ],
+                ),
+              ),
+            ),
+
+            // Settings & Actions
+            SliverToBoxAdapter(
+              child: AnimatedBuilder(
+                animation: _menuAnimation,
+                builder: (context, child) => Opacity(
+                  opacity: _menuAnimation.value,
+                  child: Transform.translate(
+                    offset: Offset(0, 30 * (1 - _menuAnimation.value)),
+                    child: child,
+                  ),
+                ),
+                child: Padding(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Open to work toggle
+                      _buildToggleCard(
+                        iconData: Icons.work_outline,
+                        title: 'Open to work',
+                        value: _openToWork,
+                        onChanged: (v) {
+                          setState(() => _openToWork = v);
+                          FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(user!.uid)
+                              .update({'openToWork': v});
+                        },
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Audio alerts toggle
+                      _buildToggleCard(
+                        iconData: Icons.volume_up,
+                        title: 'Audio Alerts',
+                        value: _audioAlertsEnabled,
+                        onChanged: (v) {
+                          setState(() => _audioAlertsEnabled = v);
+                          _saveAudioToggle(v);
+                        },
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Edit Profile
+                      _buildOptionCard(
+                        iconData: Icons.person_outlined,
+                        title: 'Edit Profile',
+                        subtitle: 'Update your personal info',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const EditProfilePage()),
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Change Password
+                      _buildOptionCard(
+                        iconData: Icons.lock_outlined,
+                        title: 'Change Password',
+                        subtitle: 'Send reset email',
+                        onTap: () async {
+                          if (user?.email != null) {
+                            await FirebaseAuth.instance
+                                .sendPasswordResetEmail(
+                                email: user!.email!);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content:
+                                    Text('Password reset email sent!')),
+                              );
+                            }
+                          }
+                        },
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // About DriveSense
+                      _buildOptionCard(
+                        iconData: Icons.info_outline,
+                        title: 'About DriveSense',
+                        subtitle: 'App version & legal',
+                        onTap: () {
+                          showAboutDialog(
+                            context: context,
+                            applicationName: 'DriveSense',
+                            applicationVersion: 'v1.0.0',
+                            applicationLegalese: '© 2025 DriveSense Inc.',
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 30),
+
+                      // Logout button
+                      _buildActionButton(
+                        title: 'Log Out',
+                        iconData: Icons.logout,
+                        isPrimary: true,
+                        onTap: _showLogoutDialog,
+                      ),
+
+                      const SizedBox(height: 40),
+                    ],
+                  ),
+                ),
               ),
             ),
           ],
@@ -339,39 +402,145 @@ class _ProfilePageState extends State<ProfilePage> with RouteAware{
     );
   }
 
-  Widget _settingsItem({
+  Widget _buildToggleCard({
+    required IconData iconData,
     required String title,
-    required IconData icon,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ListTile(
+        leading: Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.blue.withOpacity(0.1),
+                Colors.blue.withOpacity(0.2)
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(iconData, color: Colors.blue, size: 22),
+        ),
+        title: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        trailing: Switch(
+          value: value,
+          activeColor: Colors.blue,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOptionCard({
+    required IconData iconData,
+    required String title,
+    required String subtitle,
     required VoidCallback onTap,
-    Color color = Colors.black87,
   }) {
     return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: Colors.grey, width: 0.2)),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
           color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Icon(icon, color: color),
-                const SizedBox(width: 10.0),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 16.0,
-                    color: color,
-                  ),
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.blue.withOpacity(0.1),
+                    Colors.blue.withOpacity(0.2)
+                  ],
                 ),
-              ],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(iconData, color: Colors.blue, size: 22),
             ),
-            const Icon(Icons.chevron_right, color: Colors.grey),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 3),
+                  Text(subtitle,
+                      style: TextStyle(
+                          fontSize: 14, color: Colors.grey[600])),
+                ],
+              ),
+            ),
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.arrow_forward_ios,
+                  color: Colors.grey[500], size: 14),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required String title,
+    required IconData iconData,
+    required bool isPrimary,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton.icon(
+        onPressed: onTap,
+        icon: Icon(iconData),
+        label: Text(title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isPrimary ? Colors.blue : Colors.white,
+          foregroundColor: isPrimary ? Colors.white : Colors.grey[800],
+          elevation: isPrimary ? 4 : 0,
+          shadowColor:
+          isPrimary ? Colors.blue.withOpacity(0.4) : Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: isPrimary ? Colors.transparent : Colors.grey[300]!,
+              width: 1,
+            ),
+          ),
         ),
       ),
     );

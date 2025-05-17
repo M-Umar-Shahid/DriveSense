@@ -1,4 +1,3 @@
-import 'package:drivesense/screens/verification_code_screen.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../components/edit_profile_screen_components/custom_text_field.dart';
@@ -18,23 +17,23 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   bool _isLoading = false;
 
   Future<void> _onGetCode() async {
-    setState(() => _isLoading = true);
-    try {
-      await _authService.sendPasswordResetEmail(_emailController.text.trim());
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const VerificationCodePage()),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+    // setState(() => _isLoading = true);
+    // try {
+    //   await _authService.sendPasswordResetEmail(_emailController.text.trim());
+    //   if (!mounted) return;
+    //   Navigator.push(
+    //     context,
+    //     MaterialPageRoute(builder: (_) => const VerificationCodePage()),
+    //   );
+    // } catch (e) {
+    //   if (mounted) {
+    //     ScaffoldMessenger.of(context).showSnackBar(
+    //       SnackBar(content: Text('Error: $e')),
+    //     );
+    //   }
+    // } finally {
+    //   if (mounted) setState(() => _isLoading = false);
+    // }
   }
 
   @override

@@ -99,9 +99,8 @@ class DashboardService {
         .get();
 
     return snap.docs.map((doc) {
-      // doc.data() is Map<String,dynamic>
       return Trip.fromMap(
-        doc.id,                 // ← supply the Firestore document ID
+        doc.id,
         doc.data() as Map<String, dynamic>,
       );
     }).toList();

@@ -4,154 +4,122 @@ import 'package:drivesense/screens/signup_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
-import '../components/edit_profile_screen_components/custom_password_file.dart';
-import '../components/edit_profile_screen_components/custom_text_field.dart';
-import '../components/edit_profile_screen_components/primary_button.dart';
-import '../components/login_screen_components/social_login_buttons.dart';
 import 'company_admin_dashboard_screen.dart';
 import 'dashboard_screen.dart';
 import 'face_enrollment_screen.dart';
 import 'forgot_password_screen.dart';
 
-
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
-
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _emailController = TextEditingController();
+  final _emailController    = TextEditingController();
   final _passwordController = TextEditingController();
-  final _authService = AuthService();
-  bool _isLoading = false;
+  final _authService        = AuthService();
 
+  bool  _isLoading    = false;
+  bool  _showPassword = false;
+  String? _error;
 
   Future<void> _login() async {
-    setState(() => _isLoading = true);
-    try {
-      // 1) Sign in
-      await _authService.signIn(
-        _emailController.text.trim(),
-        _passwordController.text.trim(),
-      );
-      if (!mounted) return;
+    setState(() { _isLoading = true; _error = null; });
+    final email = _emailController.text.trim();
+    final pwd   = _passwordController.text.trim();
 
-      // 2) Load user profile
+    // simple email check
+    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
+      setState(() { _isLoading = false; _error = 'Invalid email'; });
+      return;
+    }
+
+    try {
+      await _authService.signIn(email, pwd);
+      if (!mounted) return;
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      if (!doc.exists) throw Exception("User profile not found");
-
+          .collection('users').doc(uid).get();
+      if (!doc.exists) throw 'Profile not found';
       final data = doc.data()!;
       final role = data['role'] as String? ?? 'driver';
-
-      // 3a) Company-admin → CompanyAdminDashboard
+      // --- routing logic unchanged ---
       if (role == 'company_admin') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const CompanyAdminDashboard()),
-        );
+        Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => const CompanyAdminDashboard()));
         return;
       }
-
-      // 3b) Driver → face-enroll if no embedding, otherwise go to Dashboard
       final emb = data['faceEmbedding'] as List<dynamic>?;
-      final hasEmbedding = emb != null && emb.isNotEmpty;
-
-      if (!hasEmbedding) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => FaceEnrollmentPage(
-              email: _emailController.text.trim(),
-              password: _passwordController.text.trim(),
+      if (emb == null || emb.isEmpty) {
+        Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => FaceEnrollmentPage(
+              email: email, password: pwd,
               displayName: data['displayName'] as String? ?? '',
-              onEnrollmentComplete: (newEmb, email, pwd, name) async {
-                // store embedding
+              onEnrollmentComplete: (newEmb, e, p, n) async {
                 await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(uid)
+                    .collection('users').doc(uid)
                     .update({'faceEmbedding': newEmb});
                 if (!mounted) return;
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const Dashboard()),
-                );
+                Navigator.pushReplacement(context,
+                    MaterialPageRoute(builder: (_) => const Dashboard()));
               },
-            ),
-          ),
-        );
+            )));
       } else {
-        // already enrolled → go straight to main Dashboard
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const FaceRecognitionPage()),
-        );
+        Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => const FaceRecognitionPage()));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Login failed: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Login failed: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-
   Future<void> _loginWithGoogle() async {
-    setState(() => _isLoading = true);
+    setState(() { _isLoading = true; _error = null; });
     try {
       await _authService.signInWithGoogle();
-
-      // After Google sign-in, pull the same routing logic as your email login:
+      if (!mounted) return;
+      // repeat routing logic
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      if (!doc.exists) throw Exception("User profile not found");
-
+          .collection('users').doc(uid).get();
+      if (!doc.exists) throw 'Profile not found';
       final data = doc.data()!;
       final role = data['role'] as String? ?? 'driver';
 
       if (role == 'company_admin') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const CompanyAdminDashboard()),
-        );
+        Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => const CompanyAdminDashboard()));
       } else {
         final emb = data['faceEmbedding'] as List<dynamic>?;
-        final hasEmbedding = emb != null && emb.isNotEmpty;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => hasEmbedding
-                ? const FaceRecognitionPage()
-                : FaceEnrollmentPage(
-              email: FirebaseAuth.instance.currentUser!.email!,
-              password: '', // not needed for Google users
-              displayName: data['displayName'] as String? ?? '',
-              onEnrollmentComplete: (newEmb, email, pwd, name) async {
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(uid)
-                    .update({'faceEmbedding': newEmb});
-                if (!mounted) return;
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const Dashboard()),
-                );
-              },
-            ),
-          ),
+        final next = (emb != null && emb.isNotEmpty)
+            ? const FaceRecognitionPage()
+            : FaceEnrollmentPage(
+          email: FirebaseAuth.instance.currentUser!.email!,
+          password: '',
+          displayName: data['displayName'] as String? ?? '',
+          onEnrollmentComplete: (newEmb, e, p, n) async {
+            await FirebaseFirestore.instance
+                .collection('users').doc(uid)
+                .update({'faceEmbedding': newEmb});
+            if (!mounted) return;
+            Navigator.pushReplacement(context,
+                MaterialPageRoute(builder: (_) => const Dashboard()));
+          },
         );
+        Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => next));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Google sign-in failed: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Google sign‐in failed: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -160,110 +128,233 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () => Navigator.pop(context),
+      // 1️⃣ full‐screen gradient
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.blue, // ← swap these for your brand
+              Color(0xFF4776E6),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 20),
+              // 2️⃣ App title
+              const Text(
+                'DriveSense',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Welcome back!',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Log in',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1976D2),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Enter the details below to log in to your account',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-                const SizedBox(height: 30),
-                CustomTextField(controller: _emailController, label: 'Email'),
-                const SizedBox(height: 20),
-                CustomPasswordField(
-                  controller: _passwordController,
-                  label: 'Password',
-                  obscureText: true,
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const ForgotPasswordPage()),
-                      );
-                    },
-                    child: const Text(
-                      'Forgot Password',
-                      style: TextStyle(color: Color(0xFF1976D2)),
+              ),
+              const SizedBox(height: 30),
+
+              // 3️⃣ white rounded card
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          // 4️⃣ headers
+                          const Text(
+                            'Welcome Back',
+                            style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            "Let's get started by filling out the form below.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // 5️⃣ email field
+                          TextField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: InputDecoration(
+                              hintText: 'Email',
+                              filled: true,
+                              fillColor: const Color(0xFFF5F6FA),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 18, horizontal: 20),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(50),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // 6️⃣ password field
+                          TextField(
+                            controller: _passwordController,
+                            obscureText: !_showPassword,
+                            decoration: InputDecoration(
+                              hintText: 'Password',
+                              filled: true,
+                              fillColor: const Color(0xFFF5F6FA),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 18, horizontal: 20),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(50),
+                                borderSide: BorderSide.none,
+                              ),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _showPassword
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                ),
+                                onPressed: () => setState(
+                                        () => _showPassword = !_showPassword),
+                              ),
+                            ),
+                          ),
+
+                          // 7️⃣ error text
+                          if (_error != null) ...[
+                            const SizedBox(height: 12),
+                            Text(_error!,
+                                style: const TextStyle(color: Colors.red)),
+                          ],
+
+                          const SizedBox(height: 20),
+
+                          // 8️⃣ Log In button
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                Colors.blue, // your accent
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(50),
+                                ),
+                                padding:
+                                const EdgeInsets.symmetric(vertical: 18),
+                              ),
+                              onPressed: _isLoading ? null : _login,
+                              child: _isLoading
+                                  ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2),
+                              )
+                                  : const Text('Log In',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // 9️⃣ Forgot password
+                          TextButton(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                  const ForgotPasswordPage()),
+                            ),
+                            child: const Text('Forgot Password ?'),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // 🔟 Or sign up with
+                          Row(
+                            children: [
+                              const Expanded(child: Divider()),
+                              Padding(
+                                padding:
+                                const EdgeInsets.symmetric(horizontal: 8),
+                                child: const Text('Or sign up with'),
+                              ),
+                              const Expanded(child: Divider()),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
+                          // ⓫ Continue with Google
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              icon: Image.asset(
+                                'assets/images/google-logo.png',
+                                width: 24,
+                                height: 24,
+                              ),
+                              label: const Text('Continue with Google'),
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                side: const BorderSide(
+                                    color: Color(0xFFE0E0E0)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(50),
+                                ),
+                                padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                              onPressed:
+                              _isLoading ? null : _loginWithGoogle,
+                            ),
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // ⓬ Sign up link
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text(
+                                "Don't have an account? ",
+                                style: TextStyle(color: Colors.black54),
+                              ),
+                              GestureDetector(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => const SignUpPage()),
+                                ),
+                                child: const Text(
+                                  'Sign Up here',
+                                  style: TextStyle(
+                                      color: Colors.blue,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 30),
-                Center(
-                  child: PrimaryButton(
-                    label: 'Login',
-                    isLoading: _isLoading,
-                    onPressed: _login,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Center(
-                  child: Text(
-                    'Or Login With',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                ),
-                const SizedBox(height: 20),
-             Center(
-                   child: IconButton(
-                     onPressed: _loginWithGoogle,
-                     icon: SizedBox(
-                       width: 40, height: 40,
-                       child: Image.asset('assets/images/google-logo.png'),
-                 ),
-             ),
-         ),
-                const SizedBox(height: 20),
-                Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        "Don't have an account? ",
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const SignUpPage()),
-                          );
-                        },
-                        child: const Text(
-                          'Sign Up',
-                          style: TextStyle(fontSize: 16, color: Color(0xFF1976D2)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
