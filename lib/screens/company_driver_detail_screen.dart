@@ -74,7 +74,7 @@ class DriverDetailPage extends StatelessWidget {
                   }
                   if (snap.connectionState == ConnectionState.waiting) {
                     return Center(
-                      child: Lottie.asset('assets/lottie/loading_animation.json', width: 150, height: 150),
+                      child: Lottie.asset('assets/animations/loading_animation.json', width: 150, height: 150),
                     );
                   }
 

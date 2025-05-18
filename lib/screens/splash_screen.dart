@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drivesense/screens/dashboard_screen.dart';
 import 'package:drivesense/screens/login_signup_screen.dart';
+import 'package:drivesense/screens/main_app_screen.dart';
 import 'package:drivesense/screens/on_boarding_screen1.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
@@ -56,7 +57,7 @@ class _SplashScreenState extends State<SplashScreen> {
             MaterialPageRoute(builder: (_) => const CompanyAdminDashboard()));
       } else {
         Navigator.pushReplacement(context,
-            MaterialPageRoute(builder: (_) => const Dashboard()));
+            MaterialPageRoute(builder: (_) => const MainAppScreen()));
       }
     } catch (_) {
       // on error fallback to driver dashboard

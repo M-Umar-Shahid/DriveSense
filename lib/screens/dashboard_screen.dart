@@ -1,196 +1,326 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:drivesense/screens/monitoring_screen.dart';
-import 'package:drivesense/screens/analytics_screen.dart';
-import 'package:drivesense/screens/image_alerts_screen.dart';
-import 'package:drivesense/screens/profile_page_screen.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../components/dashboard_screen_components/dashboard_header.dart';
-import '../components/dashboard_screen_components/recent_trips_alert.dart';
-import '../components/dashboard_screen_components/summary_box.dart';
-import '../components/dashboard_screen_components/rounded_button.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:lottie/lottie.dart';
 import '../services/dashboard_sevice.dart';
-import 'all_trips_screen.dart';
-import 'companies_list_page.dart';
+import '../models/trip.dart';
+import '../components/dashboard_screen_components/trip_card.dart';
+import '../screens/image_alerts_screen.dart';
+import '../screens/all_trips_screen.dart';
+import '../screens/monitoring_screen.dart';
+import '../screens/companies_list_page.dart';
+import 'analytics_screen.dart';
+import 'package:drivesense/screens/drivers_request_page.dart';
 
 class Dashboard extends StatefulWidget {
-  const Dashboard({super.key});
+  const Dashboard({Key? key}) : super(key: key);
   @override
-  State<Dashboard> createState() => _DashboardState();
+  _DashboardPageState createState() => _DashboardPageState();
 }
 
-class _DashboardState extends State<Dashboard> {
-  final DashboardService _svc = DashboardService();
-  final String id = FirebaseAuth.instance.currentUser!.uid;
+class _DashboardPageState extends State<Dashboard>
+    with SingleTickerProviderStateMixin {
+  final _svc = DashboardService();
+  final _uid = FirebaseAuth.instance.currentUser!.uid;
+
+  bool _loading = true;
   String _username = '';
-  int _alertCount = 0;
-  int _tripCount = 0;
-  double _focusPercentage = 0;
+  int _alerts = 0, _trips = 0;
+  double _focus = 0;
   bool _openToWork = false;
+  List<Trip> _recent = [];
+
+  late final AnimationController _animC;
+  late final Animation<double> _fadeIn;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _animC = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _fadeIn = CurvedAnimation(parent: _animC, curve: Curves.easeIn);
+
+    _loadData();
   }
 
-  Future<void> _load() async {
-    final name = await _svc.fetchUsername();
-    final stats = await _svc.fetchStats();
-    final uid     = FirebaseAuth.instance.currentUser!.uid;
-    final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    final openToWork = (userDoc.data()?['openToWork'] as bool?) ?? false;
+  Future<void> _loadData() async {
+    final name    = await _svc.fetchUsername();
+    final stats   = await _svc.fetchStats();
+    final docSnap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_uid)
+        .get();
+    final recentTrips = await _svc.fetchRecentTrips(limit: 3);
+
     setState(() {
-      _username = name;
-      _alertCount = stats.alertCount;
-      _tripCount = stats.tripCount;
-      _focusPercentage = stats.focusPercentage;
-      _openToWork    = openToWork;
+      _username   = name;
+      _alerts     = stats.alertCount;
+      _trips      = stats.tripCount;
+      _focus      = stats.focusPercentage;
+      _openToWork = (docSnap.data()?['openToWork'] as bool?) ?? false;
+      _recent     = recentTrips;
+      _loading    = false;
     });
+
+    _animC.forward();
+  }
+
+  @override
+  void dispose() {
+    _animC.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Color(0xFFF4F6FC),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(children: [
-            DashboardHeader(
-              username: _username,
-              onProfileTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfilePage())),
-              showCompanies: _openToWork,
-              onCompaniesTap: () {
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const CompaniesListPage()));
-              },
-            ),
-            SizedBox(height: 20),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: Offset(0, 4))],
-                ),
-                child: Column(children: [
-                  const Row(children: [
-                    Icon(Icons.analytics, color: Colors.deepPurple),
-                    SizedBox(width: 8),
-                    Text('Summary', style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black87)),
-                  ]),
-                  SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      // Alerts box
-                      Expanded(
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => const ImageAlertsPage()));
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: SummaryBox(
-                            title: 'Alerts',
-                            value: '$_alertCount',
-                            icon: Icons.warning_amber_rounded,
-                            iconColor: Colors.redAccent,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-
-                      // Trips box
-                      Expanded(
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => const AllTripsPage()));
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: SummaryBox(
-                            title: 'Trips',
-                            value: '$_tripCount',
-                            icon: Icons.route,
-                            iconColor: Colors.green,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-
-                      // Focus box
-                      Expanded(
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => AnalyticsPage(driverId: id)));
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: SummaryBox(
-                            title: 'Focus',
-                            value: '${_focusPercentage.toStringAsFixed(0)}%',
-                            icon: Icons.remove_red_eye,
-                            iconColor: Colors.blue,
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-
-                ]),
+        if (_loading) {
+          return Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(
+              child: Lottie.asset(
+                'assets/animations/loading_animation.json',
+                width: 180,
+                height: 180,
+                fit: BoxFit.contain,
+                repeat: true,
               ),
             ),
-            SizedBox(height: 20),
-            RoundedButton(
-              icon: Icons.shield_rounded,
-              label: "Start Detection",
-              color: Colors.blueAccent,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MonitoringPage())),
+          );
+        }
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: const Text('DriveSense', style: TextStyle(color: Colors.blueAccent,fontWeight: FontWeight.w600,fontFamily: 'Poppins')),
+        actions: [
+          if (_openToWork)
+            IconButton(
+              icon: Icon(Icons.business, color: Colors.blueAccent),
+              onPressed: () {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const CompaniesListPage()));
+              },
             ),
-            SizedBox(height: 14),
-            RoundedButton(
-              icon: Icons.pie_chart,
-              label: "View Analytics",
-              color: Colors.deepPurple,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AnalyticsPage(driverId: id))),
-            ),
-            SizedBox(height: 14),
-            RoundedButton(
-              icon: Icons.photo_library_rounded,
-              label: "Detection Gallery",
-              color: Colors.teal,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ImageAlertsPage())),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(20, 25, 20, 8),
-              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('Recent Trips', style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.bold)),
-                InkWell(
-                           onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const AllTripsPage()),
-                      );
-                    },
-                        child: const Text(
-                          'View All',
-                         style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.blueAccent,
-                          ),
-                    ),
-                ),
-              ]),
-            ),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: RecentTripsList(tripsFuture: _svc.fetchRecentTrips()),
-            ),
-          ]),
+          IconButton(
+            icon: const Icon(Icons.mail_outline, color: Colors.blueAccent),
+            tooltip: 'Hire Requests',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DriverRequestsPage()),
+              );
+            },
+          ),
+        ],
+      ),
+      body: FadeTransition(
+        opacity: _fadeIn,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _buildWelcomeCard(),
+            const SizedBox(height: 24),
+            _buildOverviewCards(),
+            const SizedBox(height: 24),
+            _buildActionButtons(),
+            const SizedBox(height: 24),
+            _buildRecentHeader(),
+            ..._recent.map((t) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: TripCard(t),
+            )),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildWelcomeCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Colors.blueAccent, Colors.purpleAccent],
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(children: [
+        const CircleAvatar(
+          backgroundColor: Colors.white24,
+          child: Icon(Icons.person, color: Colors.white),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Welcome back,',
+                  style: TextStyle(color: Colors.white70)),
+              const SizedBox(height: 4),
+              Text(_username,
+                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text('Month Summary Dashboard',
+                  style: TextStyle(color: Colors.white70)),
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildOverviewCards() {
+    return Row(
+      children: [
+        // Trips card
+        Expanded(
+          child: InkWell(
+            onTap: () {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const AllTripsPage())
+              );
+            },
+            child: _overviewCard(
+              Icons.route,
+              '$_trips',
+              'Total Trips',
+              Colors.blue,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+
+        // Alerts card
+        Expanded(
+          child: InkWell(
+            onTap: () {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const ImageAlertsPage())
+              );
+            },
+            child: _overviewCard(
+              Icons.warning_amber_rounded,
+              '$_alerts',
+              'Total Alerts',
+              Colors.orange,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+
+        // Focus card
+        Expanded(
+          child: InkWell(
+            onTap: () {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => AnalyticsPage(driverId: _uid))
+              );
+            },
+            child: _overviewCard(
+              Icons.remove_red_eye,
+              '${_focus.toStringAsFixed(0)}%',
+              'Focus',
+              Colors.green,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _overviewCard(
+      IconData icon, String value, String label, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6)],
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 8),
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(label, style: const TextStyle(color: Colors.grey)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.document_scanner_outlined, size: 20),
+            label: const Text('Detect'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blueAccent,
+              foregroundColor: Colors.white,     // ← here
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MonitoringPage()),
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.photo_library, size: 20),
+            label: const Text('Gallery'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,     // ← and here
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ImageAlertsPage()),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecentHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        const Text('Recent Trips',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        TextButton(
+          onPressed: () {
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AllTripsPage()));
+          },
+          child: const Text('View All'),
+        )
+      ],
     );
   }
 }

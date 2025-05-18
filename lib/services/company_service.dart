@@ -1,4 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../models/company_rating.dart';
 
 class CompanyService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -54,6 +57,56 @@ class CompanyService {
 
     // 2) assign the company on the user
     await userRef.update({'company': companyId});
+  }
+
+  // A) Submit a new rating
+  Future<void> submitRating({
+    required String companyId,
+    required double rating,
+    String? comment,
+  }) {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    return _firestore.collection('company_ratings').add({
+      'companyId': companyId,
+      'userId':    uid,
+      'rating':    rating,
+      'comment':   comment,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // B) Compute average rating
+  Future<double> getAverageCompanyRating(String companyId) async {
+    final snap = await _firestore
+        .collection('company_ratings')
+        .where('companyId', isEqualTo: companyId)
+        .get();
+    if (snap.docs.isEmpty) return 0.0;
+    final total = snap.docs.fold<double>(
+      0.0,
+          (sum, doc) => sum + (doc.data()['rating'] as num).toDouble(),
+    );
+    return total / snap.docs.length;
+  }
+
+  // C) Count total ratings (for “x reviews”)
+  Future<int> getCompanyRatingCount(String companyId) async {
+    final snap = await _firestore
+        .collection('company_ratings')
+        .where('companyId', isEqualTo: companyId)
+        .get();
+    return snap.size;
+  }
+
+  // D) Fetch recent reviews for display
+  Future<List<CompanyRating>> fetchRecentRatings(String companyId, {int limit = 5}) async {
+    final snap = await _firestore
+        .collection('company_ratings')
+        .where('companyId', isEqualTo: companyId)
+        .orderBy('timestamp', descending: true)
+        .limit(limit)
+        .get();
+    return snap.docs.map((d) => CompanyRating.fromFirestore(d)).toList();
   }
 
 }

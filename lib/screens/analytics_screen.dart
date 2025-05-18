@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:lottie/lottie.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
+
 
 import '../../models/detection.dart';
-import '../../models/trip.dart';
 import '../../services/analytics_service.dart';
 import '../components/analytics_screen_components/metrics_section.dart';
 import '../components/analytics_screen_components/trend_section.dart';
@@ -66,6 +62,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     // loading state
     if (_loading) {
       return Scaffold(
+        backgroundColor: Colors.white,
         body: Center(
           child: Lottie.asset(
             'assets/animations/loading_animation.json',
@@ -80,21 +77,24 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        backgroundColor: Colors.grey[100],
+        backgroundColor: Colors.white,
         appBar: AppBar(
-          backgroundColor: Colors.orangeAccent,
+          backgroundColor: Colors.blueAccent,
           elevation: 0,
           centerTitle: true,
           title: const Text('Analytics',
               style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           bottom: const TabBar(
-            indicatorColor: Colors.white,
+            labelColor: Colors.blueAccent,
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: Colors.blueAccent,
             tabs: [
-              Tab(text: 'Day'),
-              Tab(text: 'Week'),
-              Tab(text: 'Month'),
+              Tab(child: Text('Day',   style: TextStyle(color: Colors.white))),
+              Tab(child: Text('Week',  style: TextStyle(color: Colors.white))),
+              Tab(child: Text('Month', style: TextStyle(color: Colors.white))),
             ],
-          ),
+          )
+
         ),
         body: TabBarView(
           children: [

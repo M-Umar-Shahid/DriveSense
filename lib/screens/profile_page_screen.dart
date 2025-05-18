@@ -162,7 +162,7 @@ class _ProfilePageState extends State<ProfilePage>
     final email = user?.email ?? 'No Email';
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),

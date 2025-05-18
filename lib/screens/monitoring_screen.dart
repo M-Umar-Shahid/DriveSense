@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:math' as math;
+import 'package:drivesense/screens/main_app_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -712,7 +713,10 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
                       onPressed: () async {
                         if (_isAnalyzing) await toggleAnalyzing();
                         if (mounted) {
-                          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Dashboard()));
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (_) => const MainAppScreen()),
+                                (route) => false,  // remove all the old routes
+                          );
                         }
                       },
                     ),

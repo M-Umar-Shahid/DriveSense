@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drivesense/screens/face_recognition_screen.dart';
+import 'package:drivesense/screens/main_app_screen.dart';
 import 'package:drivesense/screens/signup_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -62,7 +63,7 @@ class _LoginPageState extends State<LoginPage> {
                     .update({'faceEmbedding': newEmb});
                 if (!mounted) return;
                 Navigator.pushReplacement(context,
-                    MaterialPageRoute(builder: (_) => const Dashboard()));
+                    MaterialPageRoute(builder: (_) => const MainAppScreen()));
               },
             )));
       } else {
@@ -109,7 +110,7 @@ class _LoginPageState extends State<LoginPage> {
                 .update({'faceEmbedding': newEmb});
             if (!mounted) return;
             Navigator.pushReplacement(context,
-                MaterialPageRoute(builder: (_) => const Dashboard()));
+                MaterialPageRoute(builder: (_) => const MainAppScreen()));
           },
         );
         Navigator.pushReplacement(context,

@@ -12,7 +12,7 @@ class DriverRequestsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
-      return Scaffold(
+      return const Scaffold(
         body: Center(child: Text('Please log in to view requests.')),
       );
     }

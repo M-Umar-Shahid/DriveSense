@@ -4,6 +4,7 @@ import 'package:drivesense/screens/dashboard_screen.dart';
 import '../components/face_enrollment_screen_components/camera_preview_widget.dart';
 import '../components/face_enrollment_screen_components/face_overlay_box.dart';
 import '../services/face_recognition_sevice.dart';
+import 'main_app_screen.dart';
 
 class FaceRecognitionPage extends StatefulWidget {
   const FaceRecognitionPage({super.key});
@@ -31,9 +32,9 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
     if (liveEmb != null && _svc.storedEmbedding != null) {
       final dist = _svc.compare(liveEmb, _svc.storedEmbedding!);
       if (dist < 0.5) {
-        // matched → navigate away; loader stays until dispose
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const Dashboard()),
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MainAppScreen()),
+              (route) => false,
         );
         return;
       } else {
