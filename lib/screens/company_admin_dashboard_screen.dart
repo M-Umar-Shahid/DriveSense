@@ -1,4 +1,5 @@
-import 'package:drivesense/screens/login_signup_screen.dart';
+// lib/screens/company_admin_dashboard.dart
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,7 +7,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/company_service.dart';
 import 'add_driver_screen.dart';
 import 'analytics_screen.dart';
+import 'assigned_driver_page.dart';
 import 'company_requests_page.dart';
+import 'login_signup_screen.dart';
 import 'open_driver_screen.dart';
 
 class CompanyAdminDashboard extends StatefulWidget {
@@ -17,261 +20,299 @@ class CompanyAdminDashboard extends StatefulWidget {
 }
 
 class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
-  final _searchCtrl = TextEditingController();
-  String _search = '';
   final String companyId = FirebaseAuth.instance.currentUser!.uid;
   late final DocumentReference _companyRef;
-  final CompanyService _companyService = CompanyService();
+  final CompanyService _svc = CompanyService();
+
+  String _search = '';
+  final _searchCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _companyRef = FirebaseFirestore.instance.collection('companies').doc(companyId);
+    _companyRef = FirebaseFirestore.instance
+        .collection('companies')
+        .doc(companyId);
   }
 
-  Future<void> _removeDriver(String driverId) async {
-    await _companyRef.update({
-      'driverIds': FieldValue.arrayRemove([driverId]),
-    });
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(driverId)
-        .update({'company': null});
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Driver removed from your company')),
-    );
-  }
-
-  void _logout() async {
+  Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
-
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginSignupPage()),
-          (route) => false,
+          (_) => false,
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      body: Column(
-        children: [
-          // Gradient Header
-          Container(
-            width: double.infinity,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF4285F4), Color(0xFF1976D2)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _companyRef.snapshots(),
+      builder: (ctx, snap) {
+        if (snap.hasError) {
+          return const Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(child: Text("Couldn't load company")),
+          );
+        }
+        if (!snap.hasData) {
+          return const Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final data = snap.data!.data() as Map<String, dynamic>;
+        final name = data['companyName'] as String? ?? 'Company Admin';
+        final drivers = List<String>.from(data['driverIds'] ?? []);
+        final totalDrivers = drivers.length;
+
+        return Scaffold(
+          backgroundColor: Colors.white,
+
+          // ─── HEADER ───────────────────────────────────────
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            toolbarHeight: 100,
+            flexibleSpace: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF4285F4), Color(0xFF1976D2)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius:
+                BorderRadius.vertical(bottom: Radius.circular(32)),
               ),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(32),
-                bottomRight: Radius.circular(32),
-              ),
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Title
-                    const Text(
-                      'Company Admin',
-                      style: TextStyle(
+              padding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      name,
+                      style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 24,
+                        fontSize: 26,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.person_add, color: Colors.white),
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => AddDriverPage(companyId: companyId),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.mail, color: Colors.white),
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CompanyRequestsPage(companyId: companyId),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.logout, color: Colors.white),
-                          onPressed: () => showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Confirm Logout'),
-                              content: const Text('Are you sure you want to log out?'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(ctx).pop(),
-                                  child: const Text('Cancel'),
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.of(ctx).pop();
-                                    _logout();
-                                  },
-                                  child: const Text('Logout'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.mail,
+                        color: Colors.white), onPressed: () {Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => CompanyRequestsPage(companyId: companyId)));
+                  },
+
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.exit_to_app,
+                        color: Colors.white),
+                    onPressed: () => showDialog(
+                      context: context,
+                      builder: (d) => AlertDialog(
+                        title: const Text('Log out?'),
+                        content: const Text(
+                            'Are you sure you want to log out?'),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(d),
+                              child: const Text('Cancel')),
+                          TextButton(
+                              onPressed: () {
+                                Navigator.pop(d);
+                                _logout();
+                              },
+                              child: const Text('Log out')),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ─── BODY ────────────────────────────────────────
+          body: Column(
+            children: [
+              // Overview Cards
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    _OverviewCard(
+                      icon: Icons.group,
+                      label: 'Drivers',
+                      value: '$totalDrivers',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => AssignedDriversPage(companyId: companyId)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    FutureBuilder<double>(
+                      future: _svc.getAverageCompanyRating(companyId),
+                      builder: (c, rs) {
+                        final avg = rs.data?.toStringAsFixed(1) ?? '0.0';
+                        return _OverviewCard(
+                          icon: Icons.star,
+                          label: 'Rating',
+                          value: avg,
+                          onTap: () {},
+                        );
+                      },
                     ),
                   ],
                 ),
               ),
-            ),
-          ),
 
-          // Search & Actions
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    decoration: InputDecoration(
-                      hintText: 'Search drivers...',
-                      prefixIcon: const Icon(Icons.search),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
+              // Search & Hire
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+                        ),
+                        child: TextField(
+                          controller: _searchCtrl,
+                          decoration: const InputDecoration(
+                            hintText: 'Search drivers…',
+                            border: InputBorder.none,
+                            prefixIcon: Icon(Icons.search),
+                          ),
+                          onChanged: (t) => setState(() => _search = t.toLowerCase()),
+                        ),
                       ),
                     ),
-                    onChanged: (val) => setState(() => _search = val.toLowerCase()),
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.person_add_alt_1),
-                  label: const Text('Hire Drivers'),
-                  style: ElevatedButton.styleFrom(
-                    foregroundColor: Colors.white, backgroundColor: const Color(0xFF1976D2),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => OpenDriversPage(companyId: companyId),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
 
-          // Driver List
-          Expanded(
-            child: StreamBuilder<DocumentSnapshot>(
-              stream: _companyRef.snapshots(),
-              builder: (ctx, snap) {
-                if (snap.hasError) return const Center(child: Text('Error'));
-                if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+              // Drivers List (wrapped in Expanded!)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('users')
+                        .where(FieldPath.documentId, whereIn: drivers.isEmpty ? [''] : drivers)
+                        .snapshots(),
+                    builder: (c, us) {
+                      if (us.hasError) return const Center(child: Text('Error'));
+                      if (!us.hasData) return const Center(child: CircularProgressIndicator());
+                      final docs = us.data!.docs.where((d) {
+                        final m = d.data() as Map<String, dynamic>;
+                        final name = (m['displayName'] ?? '').toString().toLowerCase();
+                        final email = (m['email'] ?? '').toString().toLowerCase();
+                        return name.contains(_search) || email.contains(_search);
+                      }).toList();
+                      if (docs.isEmpty) return const Center(child: Text('No drivers found'));
 
-                final driverIds = List<String>.from(snap.data!.get('driverIds') ?? []);
-                if (driverIds.isEmpty) return const Center(child: Text('No drivers assigned'));
-
-                return StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .where(FieldPath.documentId, whereIn: driverIds)
-                      .snapshots(),
-                  builder: (ctx, usersSnap) {
-                    if (usersSnap.hasError) return const Center(child: Text('Error loading drivers'));
-                    if (!usersSnap.hasData) return const Center(child: CircularProgressIndicator());
-
-                    final docs = usersSnap.data!.docs.where((d) {
-                      final data = d.data()! as Map<String, dynamic>;
-                      final name = (data['displayName'] ?? '').toString().toLowerCase();
-                      final email = (data['email'] ?? '').toString().toLowerCase();
-                      return name.contains(_search) || email.contains(_search);
-                    }).toList();
-
-                    if (docs.isEmpty) return const Center(child: Text('No matching drivers'));
-
-                    return ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      itemCount: docs.length,
-                      itemBuilder: (_, i) {
-                        final d = docs[i].data()! as Map<String, dynamic>;
-                        final id = docs[i].id;
-                        final name = d['displayName'] ?? 'No name';
-                        final email = d['email'] ?? 'No email';
-
-                        return Card(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          elevation: 2,
-                          margin: const EdgeInsets.symmetric(vertical: 6),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text(email),
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => AnalyticsPage(driverId: id)),
+                      return ListView.separated(
+                        itemCount: docs.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
+                          final m  = docs[i].data() as Map<String, dynamic>;
+                          final id = docs[i].id;
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
                             ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                FutureBuilder<double>(
-                                  future: _companyService.getAverageRating(id),
-                                  builder: (ctx, ratingSnap) {
-                                    final rating = ratingSnap.data ?? 0.0;
-                                    return Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            child: ListTile(
+                              title: Text(m['displayName'] ?? 'No name'),
+                              subtitle: Text(m['email'] ?? ''),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => AnalyticsPage(driverId: id)),
+                              ),
+                              trailing: FutureBuilder<double>(
+                                future: _svc.getAverageRating(id),
+                                builder: (c, r) {
+                                  final rr = r.data?.toStringAsFixed(1) ?? '0.0';
+                                  return ConstrainedBox(
+                                    // give the trailing a max width
+                                    constraints: const BoxConstraints(maxWidth: 60),
+                                    child: Container(
+                                      alignment: Alignment.center, // center the contents
+                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                                       decoration: BoxDecoration(
                                         color: Colors.amber.shade100,
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Row(
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          const Icon(Icons.star, size: 16, color: Colors.amber),
-                                          const SizedBox(width: 4),
-                                          Text(rating.toStringAsFixed(1)),
+                                          const Icon(Icons.star, color: Colors.amber, size: 16),
+                                          const SizedBox(width: 2),
+                                          Text(rr, style: const TextStyle(fontSize: 14)),
                                         ],
                                       ),
-                                    );
-                                  },
-                                ),
-                                const SizedBox(width: 12),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.redAccent),
-                                  onPressed: () => _removeDriver(id),
-                                ),
-                              ],
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
-              },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// A reusable overview card widget
+class _OverviewCard extends StatelessWidget {
+  final IconData icon;
+  final String label, value;
+  final VoidCallback onTap;
+  const _OverviewCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        elevation: 4,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+            child: Column(
+              children: [
+                Icon(icon, size: 28, color: Colors.blueAccent),
+                const SizedBox(height: 8),
+                Text(value,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(label, style: const TextStyle(color: Colors.grey)),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }

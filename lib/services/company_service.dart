@@ -60,33 +60,71 @@ class CompanyService {
   }
 
   // A) Submit a new rating
-  Future<void> submitRating({
-    required String companyId,
-    required double rating,
-    String? comment,
-  }) {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    return _firestore.collection('company_ratings').add({
-      'companyId': companyId,
-      'userId':    uid,
-      'rating':    rating,
-      'comment':   comment,
+  Future<bool> submitCompanyRating(String companyId, double rating) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
+
+    // 1) Verify membership at runtime (optional if you rely on security rules)
+    final userDoc = await _firestore.collection('users').doc(uid).get();
+    final userCompany = userDoc.data()?['company'] as String?;
+    if (userCompany != companyId) {
+      // not a member → bail
+      return false;
+    }
+
+    // 2) Write into companies/{companyId}/ratings/{uid}
+    await _firestore
+        .collection('companies')
+        .doc(companyId)
+        .collection('ratings')
+        .doc(uid)
+        .set({
+      'rating': rating,
       'timestamp': FieldValue.serverTimestamp(),
     });
+
+    return true;
   }
 
   // B) Compute average rating
   Future<double> getAverageCompanyRating(String companyId) async {
     final snap = await _firestore
-        .collection('company_ratings')
-        .where('companyId', isEqualTo: companyId)
+        .collection('companies')
+        .doc(companyId)
+        .collection('ratings')
         .get();
     if (snap.docs.isEmpty) return 0.0;
-    final total = snap.docs.fold<double>(
-      0.0,
-          (sum, doc) => sum + (doc.data()['rating'] as num).toDouble(),
-    );
-    return total / snap.docs.length;
+    final sum = snap.docs
+        .map((d) => (d.data()['rating'] as num).toDouble())
+        .fold<double>(0, (a, b) => a + b);
+    return sum / snap.docs.length;
+  }
+
+  Future<void> rateCompany(String companyId, int rating, {String? comment}) async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final ref = _firestore
+        .collection('companies')
+        .doc(companyId)
+        .collection('ratings')
+        .doc(uid);
+    await ref.set({
+      'rating':       rating,
+      'comment':      comment ?? '',
+      'timestamp':    FieldValue.serverTimestamp(),
+      'userId':       uid,
+    });
+  }
+
+  Future<double?> getMyCompanyRating(String companyId) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    final doc = await _firestore
+        .collection('companies')
+        .doc(companyId)
+        .collection('ratings')
+        .doc(uid)
+        .get();
+    return doc.exists ? (doc.data()!['rating'] as num).toDouble() : null;
   }
 
   // C) Count total ratings (for “x reviews”)

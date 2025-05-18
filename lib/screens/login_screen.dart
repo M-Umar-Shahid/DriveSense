@@ -1,12 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:drivesense/screens/company_admin_main_screen.dart';
 import 'package:drivesense/screens/face_recognition_screen.dart';
 import 'package:drivesense/screens/main_app_screen.dart';
 import 'package:drivesense/screens/signup_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
-import 'company_admin_dashboard_screen.dart';
-import 'dashboard_screen.dart';
 import 'face_enrollment_screen.dart';
 import 'forgot_password_screen.dart';
 
@@ -47,8 +46,10 @@ class _LoginPageState extends State<LoginPage> {
       final role = data['role'] as String? ?? 'driver';
       // --- routing logic unchanged ---
       if (role == 'company_admin') {
-        Navigator.pushReplacement(context,
-            MaterialPageRoute(builder: (_) => const CompanyAdminDashboard()));
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const CompanyAdminMainScreen()),
+              (route) => false,  // remove all the old routes
+        );
         return;
       }
       final emb = data['faceEmbedding'] as List<dynamic>?;
@@ -94,8 +95,10 @@ class _LoginPageState extends State<LoginPage> {
       final role = data['role'] as String? ?? 'driver';
 
       if (role == 'company_admin') {
-        Navigator.pushReplacement(context,
-            MaterialPageRoute(builder: (_) => const CompanyAdminDashboard()));
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const CompanyAdminMainScreen()),
+              (route) => false,  // remove all the old routes
+        );
       } else {
         final emb = data['faceEmbedding'] as List<dynamic>?;
         final next = (emb != null && emb.isNotEmpty)

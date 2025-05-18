@@ -30,7 +30,7 @@ class CompanyRequestsPage extends StatelessWidget {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                padding:  const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                 child: Row(
                   children: [
                     IconButton(
@@ -38,7 +38,7 @@ class CompanyRequestsPage extends StatelessWidget {
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                     const SizedBox(width: 8),
-                    const Text(
+                     const Text(
                       'Join Requests',
                       style: TextStyle(
                         color: Colors.white,

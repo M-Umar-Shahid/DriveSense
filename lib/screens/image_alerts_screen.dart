@@ -76,7 +76,7 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
       context: context,
       builder: (_) => SimpleDialog(
         title: const Text('Filter by type'),
-        children: ['All', 'Drowsy', 'Distracted', 'Seatbelt', 'Yawning']
+        children: ['All', 'Drowsy', 'Distracted', 'No Seatbelt', 'Yawning']
             .map((t) => SimpleDialogOption(
           child: Text(t),
           onPressed: () => Navigator.pop(context, t),

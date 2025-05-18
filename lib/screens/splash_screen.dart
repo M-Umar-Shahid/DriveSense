@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:drivesense/screens/company_admin_main_screen.dart';
 import 'package:drivesense/screens/dashboard_screen.dart';
 import 'package:drivesense/screens/login_signup_screen.dart';
 import 'package:drivesense/screens/main_app_screen.dart';
@@ -54,7 +55,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
       if (role == 'company_admin') {
         Navigator.pushReplacement(context,
-            MaterialPageRoute(builder: (_) => const CompanyAdminDashboard()));
+            MaterialPageRoute(builder: (_) => const CompanyAdminMainScreen()));
       } else {
         Navigator.pushReplacement(context,
             MaterialPageRoute(builder: (_) => const MainAppScreen()));

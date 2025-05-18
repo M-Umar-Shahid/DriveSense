@@ -362,24 +362,6 @@ class _ProfilePageState extends State<ProfilePage>
                           }
                         },
                       ),
-
-                      const SizedBox(height: 16),
-
-                      // About DriveSense
-                      _buildOptionCard(
-                        iconData: Icons.info_outline,
-                        title: 'About DriveSense',
-                        subtitle: 'App version & legal',
-                        onTap: () {
-                          showAboutDialog(
-                            context: context,
-                            applicationName: 'DriveSense',
-                            applicationVersion: 'v1.0.0',
-                            applicationLegalese: '© 2025 DriveSense Inc.',
-                          );
-                        },
-                      ),
-
                       const SizedBox(height: 30),
 
                       // Logout button
@@ -389,8 +371,6 @@ class _ProfilePageState extends State<ProfilePage>
                         isPrimary: true,
                         onTap: _showLogoutDialog,
                       ),
-
-                      const SizedBox(height: 40),
                     ],
                   ),
                 ),

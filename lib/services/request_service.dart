@@ -5,53 +5,98 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 class RequestService {
   final _db = FirebaseFirestore.instance;
+  final _reqs = FirebaseFirestore.instance.collection('requests');
 
-  // A) Driver → Company: join request
-  Future<void> sendJoinRequest(String companyId) {
+  /// Sends a join‐company request (driver → company).
+  /// Returns `true` if created, or `false` if there's already a pending one.
+  Future<bool> sendJoinRequest(String companyId) async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    return _db.collection('requests').add({
-      'type':       'join_company',
-      'fromId':     uid,
-      'toId':       companyId,
-      'timestamp':  FieldValue.serverTimestamp(),
-      'status':     'pending',
+
+    // 0) Don’t let an already‐employed driver send ANY new join requests
+    final userSnap = await _db.collection('users').doc(uid).get();
+    final currentCompany = (userSnap.data()?['company'] as String?)?.trim();
+    if (currentCompany != null && currentCompany.isNotEmpty) {
+      // driver is already in a company
+      return false;
+    }
+
+    // 1) Check for an existing pending join_company request
+    final existing = await _db
+        .collection('requests')
+        .where('type', isEqualTo: 'join_company')
+        .where('fromId', isEqualTo: uid)
+        .where('toId', isEqualTo: companyId)
+        .where('status', isEqualTo: 'pending')
+        .limit(1)
+        .get();
+
+    if (existing.docs.isNotEmpty) {
+      // already waiting on this company
+      return false;
+    }
+
+    // 2) Create new
+    await _db.collection('requests').add({
+      'type':      'join_company',
+      'fromId':    uid,
+      'toId':      companyId,
+      'timestamp': FieldValue.serverTimestamp(),
+      'status':    'pending',
     });
+    return true;
   }
 
-  // B) Company → Driver: hire request
-  Future<void> sendHireRequest(String companyId, String driverId) {
-    return _db.collection('requests').add({
-      'type':       'hire_driver',
-      'fromId':     companyId,
-      'toId':       driverId,
-      'timestamp':  FieldValue.serverTimestamp(),
-      'status':     'pending',
+
+  /// Sends a hire‐driver request (company → driver).
+  /// Returns `true` if created, or `false` if there's already a pending one.
+  Future<bool> sendHireRequest(String companyId, String driverId) async {
+    // 1) Check for an existing pending hire_driver request
+    final existing = await _reqs
+        .where('type', isEqualTo: 'hire_driver')
+        .where('fromId', isEqualTo: companyId)
+        .where('toId', isEqualTo: driverId)
+        .where('status', isEqualTo: 'pending')
+        .limit(1)
+        .get();
+
+    if (existing.docs.isNotEmpty) {
+      // already waiting on this driver
+      return false;
+    }
+
+    // 2) Create new
+    await _reqs.add({
+      'type':      'hire_driver',
+      'fromId':    companyId,
+      'toId':      driverId,
+      'timestamp': FieldValue.serverTimestamp(),
+      'status':    'pending',
     });
+    return true;
   }
 
-  // C) Accept or reject a request
+  /// Accepts or rejects a request, and if accepted, commits the assignment.
   Future<void> respondToRequest(String requestId, bool accept) async {
     final reqRef = _db.collection('requests').doc(requestId);
     final reqSnap = await reqRef.get();
     final data   = reqSnap.data()!;
-    final type   = data['type'] as String;
+    final type   = data['type']  as String;
     final fromId = data['fromId'] as String;
-    final toId   = data['toId'] as String;
+    final toId   = data['toId']   as String;
 
     // 1) Update status
     await reqRef.update({'status': accept ? 'accepted' : 'rejected'});
-
     if (!accept) return;
 
     // 2) If accepted, do the actual assignment
     if (type == 'hire_driver') {
-      // fromId=company, toId=driver
+      // company → driver
       await _db.collection('companies').doc(fromId).update({
         'driverIds': FieldValue.arrayUnion([toId]),
       });
       await _db.collection('users').doc(toId).update({'company': fromId});
     } else {
-      // join_company: fromId=driver, toId=company
+      // join_company: driver → company
       await _db.collection('companies').doc(toId).update({
         'driverIds': FieldValue.arrayUnion([fromId]),
       });
