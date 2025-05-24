@@ -47,7 +47,7 @@ class _DashboardPageState extends State<Dashboard>
 
   Future<void> _loadData() async {
     final name    = await _svc.fetchUsername();
-    final stats   = await _svc.fetchStats();
+    final stats   = await _svc.fetchStatsForUser(_uid);
     final docSnap = await FirebaseFirestore.instance
         .collection('users')
         .doc(_uid)
@@ -288,8 +288,8 @@ class _DashboardPageState extends State<Dashboard>
             icon: const Icon(Icons.photo_library, size: 20),
             label: const Text('Gallery'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,     // ← and here
+              backgroundColor: Colors.blueAccent,
+              foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 20),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),

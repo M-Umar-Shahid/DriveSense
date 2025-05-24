@@ -127,13 +127,14 @@ class CompanyService {
     return doc.exists ? (doc.data()!['rating'] as num).toDouble() : null;
   }
 
-  // C) Count total ratings (for “x reviews”)
   Future<int> getCompanyRatingCount(String companyId) async {
-    final snap = await _firestore
-        .collection('company_ratings')
-        .where('companyId', isEqualTo: companyId)
+    final snapshot = await FirebaseFirestore.instance
+        .collection('companies')
+        .doc(companyId)
+        .collection('ratings')
         .get();
-    return snap.size;
+
+    return snapshot.docs.length;
   }
 
   // D) Fetch recent reviews for display
@@ -146,5 +147,6 @@ class CompanyService {
         .get();
     return snap.docs.map((d) => CompanyRating.fromFirestore(d)).toList();
   }
+
 
 }

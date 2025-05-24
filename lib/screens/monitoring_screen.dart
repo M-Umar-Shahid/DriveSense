@@ -122,11 +122,17 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   final _detector = DistractionDetector();
   bool _modelLoaded = false;
   bool _isDistracted = false;
+  String? _currentDistractionLabel;
+  double _currentDistractionConfidence = 0.0;
+  final List<String> distractionLabels = [
+    "Drinking",
+    "Eating",
+    "Mobile Use",
+    "Smoking"
+  ];
 
   // In your _MonitoringPageState:
   final _tracker = MiniSort();
-
-
 
   late final FlutterTts _tts;
   String? _currentAlert;
@@ -245,10 +251,13 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   }
 
   void _stopAnalyzingInternal() {
-    _frameSubscription?.cancel();
-    _frameSubscription = null;
+    if (_frameSubscription != null) {
+      _frameSubscription?.cancel();
+      _frameSubscription = null;
+    }
     _mpController = null;
   }
+
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -347,65 +356,80 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
 
 
   void _listenToFrameStream() {
-    _frameSubscription = _frameStream
-        .receiveBroadcastStream()
-        .listen((event) async {
-      if (!_isAnalyzing) return;
+    if (_frameSubscription != null) {
+      debugPrint("⚠️ Frame stream already active");
+      return;
+    }
 
-      if (event is Uint8List) {
-        final image = img.decodeImage(event);
-        if (image == null) {
-          print('⚠️ Failed to decode image');
-          return;
+    debugPrint("🛰️ Subscribed to frame stream");
+
+    _frameSubscription = _frameStream.receiveBroadcastStream().listen(
+          (event) async {
+        debugPrint("📦 Frame received");
+
+        if (!_isAnalyzing) return;
+
+        if (event is Uint8List) {
+          final image = img.decodeImage(event);
+          if (image == null) {
+            debugPrint('⚠️ Failed to decode image');
+            return;
+          }
+
+          _lastFrameImage = image;
+
+          setState(() {
+            _imageSize = Size(image.width.toDouble(), image.height.toDouble());
+          });
+
+          debugPrint("🎯 Running seatbelt detection");
+          await _runSeatbeltDetection(event, image);
+
+          if (_modelLoaded) {
+            debugPrint("🎯 Running distraction detection");
+            await _runDistractionDetection(image);
+          }
         }
-
-        _lastFrameImage = image;
-
-        setState(() {
-          _imageSize = Size(
-            image.width.toDouble(),
-            image.height.toDouble(),
-          );
-        });
-
-        // 1️⃣ Run your seatbelt detector
-        await _runSeatbeltDetection(event, image);
-
-        // 2️⃣ Then, if your distraction model is loaded, run it too
-        if (_modelLoaded) {
-          await _runDistractionDetection(image);
-        }
-      } else {
-        print('⚠️ Unexpected frame type: ${event.runtimeType}');
-      }
-    }, onError: (e) {
-      print('⚠️ FrameStream error: $e');
-    });
+      },
+      onError: (e) {
+        debugPrint('❌ FrameStream error: $e');
+      },
+    );
   }
 
   Future<void> _runDistractionDetection(img.Image frame) async {
-    // 1️⃣ Run the detector
-    final dets = _detector.detect(
-      frame,
-      confThreshold: 0.4,
-      iouThreshold: 0.5,
-    );
+    debugPrint("🚀 Running distraction detection");
 
-    final distracted = dets.isNotEmpty;
-    setState(() => _isDistracted = distracted);
+    final result = _detector.getTopClass(frame);
+    final int predictedClass = result['classIndex'];
+    final double confidence = result['confidence'];
 
-    // 2️⃣ Speech alert
-    if (distracted && _canSave('distraction', cooldown: Duration(seconds: 30))) {
-      _addRecentAlert('Distraction detected');
-      await _saveDetectionSnapshot(image: frame, alertType: 'Distraction');
+    final String predictedLabel = predictedClass == -1
+        ? "Safe Driving"
+        : distractionLabels[predictedClass];  // e.g., ["Drinking", "Eating", ...]
+
+    final bool distracted = predictedClass != -1;
+
+    setState(() {
+      _isDistracted = distracted;
+      _currentDistractionLabel = predictedLabel;
+      _currentDistractionConfidence = confidence;
+    });
+
+
+    if (distracted && _canSave(predictedLabel, cooldown: const Duration(seconds: 30))) {
+      debugPrint("📸 Saving snapshot for: $predictedLabel");
+      _addRecentAlert('$predictedLabel detected');
+      await _saveDetectionSnapshot(image: frame, alertType: predictedLabel);
     }
 
     _updateAlertSpeech();
   }
 
 
-
   Future<void> _runSeatbeltDetection(Uint8List frameBytes, img.Image thisFrame) async {
+    debugPrint("🎯 Running seatbelt detection");
+
     if (_seatbeltInterpreter == null) return;
 
     // 1️⃣ Preprocess & run inference (implicitly allocates once)
@@ -477,7 +501,6 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       }
     });
   }
-
 
   void _onLandmarkStream(NormalizedLandmarkList landmarkList) {
     if (!_isAnalyzing) return;
@@ -605,59 +628,46 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       if (_recentAlerts.length > 5) _recentAlerts.removeLast();
     }
   }
-
   Widget _buildCameraView() {
     return Center(
-      child: _isAnalyzing
-      // ── CAMERA ACTIVE: show camera + overlays ───────────────────────
-          ? SizedBox(
-        key: ValueKey(_cameraViewKey),
-        height: 500,
-        width: 300,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            NativeView(
-              onViewCreated: (controller) {
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox(
+            height: 500,
+            width: 300,
+            child: NativeView(
+              onViewCreated: (FlutterMediapipe controller) {
                 _mpController = controller;
                 controller.landMarksStream.listen((landmarks) {
                   if (_isAnalyzing) _onLandmarkStream(landmarks);
                 });
-                Future.delayed(const Duration(milliseconds: 500), () {
-                  if (mounted && _isAnalyzing) _listenToFrameStream();
-                });
+                _listenToFrameStream();
               },
             ),
-            Positioned.fill(
-              child: CustomPaint(
-                painter: SeatbeltBoxPainter(
-                  boxes:     _noSeatbeltBoxes,
-                  imageSize: _imageSize,
+          ),
+
+          // 🔲 Overlay when _isAnalyzing is false
+          if (!_isAnalyzing)
+            Container(
+              height: 500,
+              width: 300,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.black.withOpacity(0.85),
+              ),
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.camera_alt, color: Colors.grey, size: 100),
+                    SizedBox(height: 10),
+                    Text('Camera not active', style: TextStyle(color: Colors.white)),
+                  ],
                 ),
               ),
             ),
-          ],
-        ),
-      )
-      // ── CAMERA INACTIVE: show placeholder ───────────────────────────
-          : Container(
-        height: 500,
-        width: 300,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: Colors.black,
-        ),
-        child: const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.camera_alt, color: Colors.grey, size: 100),
-              SizedBox(height: 10),
-              Text('Camera not active',
-                  style: TextStyle(color: Colors.white)),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -747,7 +757,13 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
                         _mouthOpenness > 0.2 ? Colors.red : Colors.green,
                         _mouthOpenness.clamp(0.0, 1.0)),
                     _statusIndicator('Seatbelt', _noSeatbelt ? Colors.red : Colors.green, 1),
-                    _statusIndicator(_isDistracted ? 'Distracted' : 'Focused', _isDistracted ? Colors.red : Colors.green, _isDistracted ? 1.0 : 0.0),
+                    _statusIndicator(
+                      _isDistracted
+                          ? (_currentDistractionLabel ?? 'Distracted')
+                          : 'Safe Driving',
+                      _isDistracted ? Colors.red : Colors.green,
+                      _isDistracted ? _currentDistractionConfidence : 1.0,  // show full green
+                    ),
                   ],
                 ),
                 const SizedBox(height: 20),

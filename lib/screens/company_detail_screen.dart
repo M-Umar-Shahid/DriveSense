@@ -91,102 +91,110 @@ class CompanyDetailPage extends StatelessWidget {
                         ),
                       ),
                       child: StreamBuilder<DocumentSnapshot>(
-                        stream: FirebaseFirestore.instance.collection('drivers').doc(id).snapshots(),
+                        stream: FirebaseFirestore.instance.collection('users').doc(id).snapshots(),
                         builder: (ctx, drvSnap) {
-                          if (drvSnap.hasError) {
-                            return ListTile(title: Text('Error loading $id'));
-                          }
-                          if (!drvSnap.hasData) {
-                            return ListTile(title: Text('Loading...'));
-                          }
+                          if (drvSnap.hasError) return ListTile(title: Text('Error loading $id'));
+                          if (!drvSnap.hasData) return ListTile(title: Text('Loading...'));
 
                           final d = drvSnap.data!.data() as Map<String, dynamic>? ?? {};
-                          final name     = d['name']   as String?  ?? 'Unnamed';
-                          final focusPct = (d['focus'] as num?)?.toDouble() ?? 0.0;
-                          final stars    = ((focusPct / 20).ceil()).clamp(1, 5);
+                          final name = d['displayName'] as String? ?? 'Unnamed';
 
-                          return Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [Colors.white, Colors.blue.shade50],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0,4)),
-                              ],
-                            ),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(20),
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => DriverDetailPage(driverId: id)),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 56,
-                                      height: 56,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        gradient: LinearGradient(
-                                          colors: [Colors.blue.shade100, Colors.blue.shade200],
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                          style: const TextStyle(
-                                            fontSize: 24,
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            name,
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            children: List.generate(5, (j) {
-                                              return Icon(
-                                                j < stars ? Icons.star : Icons.star_border,
-                                                color: Colors.amber,
-                                                size: 20,
-                                              );
-                                            }),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            '${focusPct.toStringAsFixed(0)}% focus',
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                          return FutureBuilder<DashboardStats>(
+                            future: fetchStatsForUser(id),
+                            builder: (context, statsSnap) {
+                              if (!statsSnap.hasData) {
+                                return const SizedBox(); // or a skeleton placeholder
+                              }
+
+                              final stats = statsSnap.data!;
+                              final focusPct = stats.focusPercentage;
+                              final stars = ((focusPct / 20).ceil()).clamp(1, 5);
+
+
+                              return Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [Colors.white, Colors.blue.shade50],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0,4)),
                                   ],
                                 ),
-                              ),
-                            ),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(20),
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => DriverDetailPage(driverId: id)),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 56,
+                                          height: 56,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: LinearGradient(
+                                              colors: [Colors.blue.shade100, Colors.blue.shade200],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                              style: const TextStyle(
+                                                fontSize: 24,
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                name,
+                                                style: const TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: List.generate(5, (j) {
+                                                  return Icon(
+                                                    j < stars ? Icons.star : Icons.star_border,
+                                                    color: Colors.amber,
+                                                    size: 20,
+                                                  );
+                                                }),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                '${focusPct.toStringAsFixed(0)}% focus',
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.grey,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                           );
                         },
                       ),
@@ -200,4 +208,59 @@ class CompanyDetailPage extends StatelessWidget {
       ),
     );
   }
+  Future<double> getDriverFocus(String driverId) async {
+    final tripsSnap = await FirebaseFirestore.instance
+        .collection('trips')
+        .where('driverId', isEqualTo: driverId)
+        .get();
+
+    final total = tripsSnap.size;
+    if (total == 0) return 0.0;
+
+    final safeTrips = tripsSnap.docs.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      return data['status'] == 'Safe';
+    }).length;
+
+    return (safeTrips / total) * 100;
+  }
+
+  Future<DashboardStats> fetchStatsForUser(String uid) async {
+    final alertsSnap = await FirebaseFirestore.instance
+        .collection('detections')
+        .where('uid', isEqualTo: uid)
+        .get();
+
+    final tripsSnap = await FirebaseFirestore.instance
+        .collection('trips')
+        .where('uid', isEqualTo: uid)
+        .get();
+
+    final safeTrips = tripsSnap.docs
+        .where((d) => (d.data() as Map<String, dynamic>)['status'] == 'Safe')
+        .length;
+
+    final totalTrips = tripsSnap.size;
+    final focus = totalTrips > 0 ? (safeTrips / totalTrips * 100) : 0.0;
+
+    return DashboardStats(
+      alertCount: alertsSnap.size,
+      tripCount: totalTrips,
+      focusPercentage: focus,
+    );
+  }
+
+
 }
+class DashboardStats {
+  final int alertCount;
+  final int tripCount;
+  final double focusPercentage;
+
+  DashboardStats({
+    required this.alertCount,
+    required this.tripCount,
+    required this.focusPercentage,
+  });
+}
+

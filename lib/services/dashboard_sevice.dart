@@ -15,31 +15,20 @@ class DashboardService {
     return user.displayName ?? user.email?.split('@').first ?? 'User';
   }
 
-  Future<DashboardStats> fetchStats() async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      debugPrint("⚠️ fetchStats: no currentUser");
-      return DashboardStats(alertCount: 0, tripCount: 0, focusPercentage: 0);
-    }
-    debugPrint("🔍 fetchStats for uid = ${user.uid}");
-
+  Future<DashboardStats> fetchStatsForUser(String uid) async {
     final alertsSnap = await _db
         .collection('detections')
-        .where('uid', isEqualTo: user.uid)
+        .where('uid', isEqualTo: uid)
         .get();
-    debugPrint("   detections count = ${alertsSnap.size}");
 
     final tripsSnap = await _db
         .collection('trips')
-        .where('uid', isEqualTo: user.uid)
+        .where('uid', isEqualTo: uid)
         .get();
-    debugPrint("   trips count      = ${tripsSnap.size}");
 
     final safeTrips = tripsSnap.docs.where((d) => (d['status'] as String?) == 'Safe').length;
     final totalTrips = tripsSnap.size;
     double focus = totalTrips > 0 ? safeTrips / totalTrips * 100 : 0;
-
-    debugPrint("   safeTrips = $safeTrips, focus% = $focus");
 
     return DashboardStats(
       alertCount: alertsSnap.size,
@@ -47,6 +36,7 @@ class DashboardService {
       focusPercentage: focus,
     );
   }
+
 
 
   Future<List<Trip>> fetchAllTrips() async {
