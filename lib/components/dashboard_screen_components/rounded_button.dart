@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 class RoundedButton extends StatelessWidget {
-  final IconData icon;
+  final IconData? icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
   const RoundedButton({
-    required this.icon,
+    this.icon,
     required this.label,
     required this.color,
     required this.onTap,

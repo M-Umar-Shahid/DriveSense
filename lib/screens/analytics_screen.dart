@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
-
-
+import 'package:calendar_heatmap/calendar_heatmap.dart';
 import '../../models/detection.dart';
 import '../../services/analytics_service.dart';
 import '../components/analytics_screen_components/metrics_section.dart';
@@ -26,8 +25,12 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   double _totalHours = 0;
   String _recommendation = '';
   List<int> _weeklyCounts = List.filled(7, 0);
-  Map<String,int> _monthlyCounts = {};
+  Map<String, int> _monthlyCounts = {};
   List<Detection> _recentDetections = [];
+  List<int> _hourlyCounts = List.filled(24, 0);
+  Map<DateTime, int> _last30Days = {};
+  double _alertsDelta = 0;
+  double _hoursDelta = 0;
 
   @override
   void initState() {
@@ -36,30 +39,34 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   }
 
   Future<void> _loadAll() async {
-    // fetch everything in parallel
-    final rec     = _svc.fetchRecentDetections(widget.driverId, limit: 5);
-    final weekly  = _svc.fetchWeeklyTrends(widget.driverId);
-    final monthly = _svc.fetchMonthlyBreakdown(widget.driverId);
-    final totals  = _svc.fetchTotals(widget.driverId);
+    final rec       = _svc.fetchRecentDetections(widget.driverId, limit: 5);
+    final weekly    = _svc.fetchWeeklyTrends(widget.driverId);
+    final monthly   = _svc.fetchMonthlyBreakdown(widget.driverId);
+    final totals    = _svc.fetchTotals(widget.driverId);
+    final hourly    = _svc.fetchHourlyCounts(widget.driverId);
+    final heatmap   = _svc.fetchLast30DaysCounts(widget.driverId);
 
-    final results = await Future.wait([rec, weekly, monthly, totals]);
+    final results = await Future.wait([rec, weekly, monthly, totals, hourly, heatmap]);
     if (!mounted) return;
 
+    final totMap = results[3] as Map<String, dynamic>;
     setState(() {
-      _recentDetections  = results[0] as List<Detection>;
-      _weeklyCounts      = results[1] as List<int>;
-      _monthlyCounts     = results[2] as Map<String,int>;
-      final totMap       = results[3] as Map<String, dynamic>;
-      _totalAlerts       = totMap['totalAlerts'];
-      _totalHours        = totMap['totalHours'];
-      _recommendation    = totMap['recommendation'];
-      _loading           = false;
+      _recentDetections = results[0] as List<Detection>;
+      _weeklyCounts     = results[1] as List<int>;
+      _monthlyCounts    = results[2] as Map<String, int>;
+      _totalAlerts      = totMap['totalAlerts'];
+      _totalHours       = totMap['totalHours'];
+      _recommendation   = totMap['recommendation'];
+      _alertsDelta      = totMap['alertsDelta'];
+      _hoursDelta       = totMap['hoursDelta'];
+      _hourlyCounts     = results[4] as List<int>;
+      _last30Days       = results[5] as Map<DateTime, int>;
+      _loading          = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // loading state
     if (_loading) {
       return Scaffold(
         backgroundColor: Colors.white,
@@ -82,53 +89,82 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           backgroundColor: Colors.blueAccent,
           elevation: 0,
           centerTitle: true,
-          title: const Text('Analytics',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: const Text(
+            'Analytics',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          actions: [ // date-range picker
+            IconButton(
+              icon: const Icon(Icons.date_range),
+              onPressed: () async {
+                final range = await showDateRangePicker(
+                  context: context,
+                  firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                  lastDate: DateTime.now(),
+                );
+                if (range != null) {
+                  // implement _loadForRange
+                }
+              },
+            ),
+          ],
           bottom: const TabBar(
             labelColor: Colors.blueAccent,
             unselectedLabelColor: Colors.grey,
             indicatorColor: Colors.blueAccent,
             tabs: [
-              Tab(child: Text('Day',   style: TextStyle(color: Colors.white))),
-              Tab(child: Text('Week',  style: TextStyle(color: Colors.white))),
+              Tab(child: Text('Day', style: TextStyle(color: Colors.white))),
+              Tab(child: Text('Week', style: TextStyle(color: Colors.white))),
               Tab(child: Text('Month', style: TextStyle(color: Colors.white))),
             ],
-          )
-
+          ),
         ),
         body: TabBarView(
-          children: [
-            _buildDayView(),
-            _buildWeekView(),
-            _buildMonthView(),
-          ],
+          children: [_buildDayView(), _buildWeekView(), _buildMonthView()],
         ),
       ),
     );
   }
 
   Widget _buildDayView() {
-    // You can swap this with today’s specific data
     return _buildCommonBody(
-      title: 'Today\'s Trend',
-      trendWidget: Center(child: Text(
-        '${_weeklyCounts[DateTime.now().weekday % 7]} alerts today',
-        style: const TextStyle(fontSize: 18),
-      )),
-    );
+              title: 'Hourly Trend',
+              trendWidget: TrendSection(
+                counts: _hourlyCounts,
+                isSparkline: true,
+                showXAxis: true,
+              ),
+        );
   }
 
   Widget _buildWeekView() {
     return _buildCommonBody(
-      title: 'Weekly Trend',
-      trendWidget: TrendSection(weeklyCounts: _weeklyCounts),
-    );
+              title: 'Weekly Trend',
+              trendWidget: TrendSection(
+                counts: _weeklyCounts,
+              ),
+        );
   }
 
   Widget _buildMonthView() {
     return _buildCommonBody(
       title: 'Monthly Breakdown',
-      trendWidget: PieBreakdown(monthlyCounts: _monthlyCounts),
+      trendWidget: Column(
+        children: [
+          PieBreakdown(data: _monthlyCounts, showLegend: true),
+          const SizedBox(height: 24),
+          const Text('30-Day Alert Heatmap', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          CalendarHeatMap(
+            input: _last30Days,
+            colorThresholds: {
+              1: Colors.blue[100]!,
+              5: Colors.blue[300]!,
+              10: Colors.blue[600]!,
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -139,38 +175,38 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Metrics
-            const Text('Metrics',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Metrics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             MetricsSection(
               totalAlerts: _totalAlerts,
               totalHours: _totalHours,
               recommendation: _recommendation,
             ),
-
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _kpiCard('Alerts', _formatDelta(_alertsDelta), _alertsDelta >= 0 ? Icons.trending_up : Icons.trending_down, _alertsDelta >= 0 ? Colors.green : Colors.redAccent),
+                _kpiCard('Hours', _formatDelta(_hoursDelta), _hoursDelta >= 0 ? Icons.trending_up : Icons.trending_down, _hoursDelta >= 0 ? Colors.green : Colors.redAccent),
+              ],
+            ),
             const SizedBox(height: 24),
 
-            // Trend / Chart
-            Text(title,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0,4))],
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0, 4))],
               ),
               padding: const EdgeInsets.all(16),
               child: trendWidget,
             ),
 
             const SizedBox(height: 24),
-
-            // Recent Issues
-            const Text('Recent Issues',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Recent Issues', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             RecentDetectionsList(detections: _recentDetections),
           ],
@@ -178,4 +214,28 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       ),
     );
   }
+
+  Widget _kpiCard(String label, String delta, IconData icon, Color color) =>
+      Expanded(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6)],
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(height: 4),
+              Text(delta, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 2),
+              Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+          ),
+        ),
+      );
+
+  String _formatDelta(double val) => val >= 0 ? '+${val.toStringAsFixed(1)}%' : '${val.toStringAsFixed(1)}%';
 }

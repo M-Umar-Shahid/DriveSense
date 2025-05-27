@@ -1,61 +1,87 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class PieBreakdown extends StatelessWidget {
-  final Map<String,int> monthlyCounts;
+  final Map<String, int> data;
+  final bool showLegend;
+
   const PieBreakdown({
-    required this.monthlyCounts,
-    super.key,
-  });
+    Key? key,
+    required this.data,
+    this.showLegend = false,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final total = monthlyCounts.values.fold<int>(0, (a, b) => a + b);
-    final colors = [Colors.orange, Colors.deepPurple, Colors.green, Colors.redAccent, Colors.teal];
-    final sections = total == 0
-        ? [PieChartSectionData(color: Colors.grey[300]!, value: 1, showTitle: false)]
-        : List.generate(monthlyCounts.length, (i) {
-      final key = monthlyCounts.keys.elementAt(i);
-      final value = monthlyCounts[key]!.toDouble();
-      final pct = (value/total)*100;
-      return PieChartSectionData(
-        color: colors[i % colors.length],
-        value: value,
+    final total = data.values.fold<int>(0, (sum, v) => sum + v);
+    final sections = <PieChartSectionData>[];
+    data.forEach((label, count) {
+      final color = _colorForLabel(label);
+      sections.add(PieChartSectionData(
+        value: count.toDouble(),
+        color: color,
+        title: '${((count / total) * 100).toStringAsFixed(0)}%',
         radius: 50,
-        title: pct < 5 ? '' : '${pct.toStringAsFixed(1)}%',
-        titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-      );
+        titleStyle: const TextStyle(fontSize: 12, color: Colors.white),
+      ));
     });
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          children: List.generate(monthlyCounts.length, (i) {
-            final key = monthlyCounts.keys.elementAt(i);
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(width: 12, height: 12, decoration: BoxDecoration(color: colors[i%colors.length], shape: BoxShape.circle)),
-                const SizedBox(width: 6),
-                Text(key),
-              ],
-            );
-          }),
-        ),
-        const SizedBox(height: 12),
         SizedBox(
           height: 200,
           child: PieChart(
             PieChartData(
-              sectionsSpace: 4,
-              centerSpaceRadius: 40,
               sections: sections,
+              centerSpaceRadius: 24,
+              sectionsSpace: 2,
             ),
           ),
         ),
+        if (showLegend) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 6,
+            children: data.keys.map((label) {
+              return _LegendItem(
+                color: _colorForLabel(label),
+                label: label,
+              );
+            }).toList(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Color _colorForLabel(String label) {
+    switch (label) {
+      case 'Drowsy':
+        return Colors.orange;
+      case 'Distraction':
+        return Colors.red;
+      case 'Yawning':
+        return Colors.blue;
+      default:
+        return Colors.grey;
+    }
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendItem({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 12, height: 12, color: color),
+        const SizedBox(width: 6),
+        Text(label),
       ],
     );
   }

@@ -1,84 +1,92 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class TrendSection extends StatelessWidget {
-  final List<int> weeklyCounts;
-  const TrendSection({ required this.weeklyCounts, Key? key }) : super(key: key);
+  final List<int> counts;
+  final bool isSparkline;
+  final bool showXAxis;
+
+  /// `counts` is hourly or daily values.
+  const TrendSection({
+    Key? key,
+    required this.counts,
+    this.isSparkline = false,
+    this.showXAxis = false,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // guard empty
-    if (weeklyCounts.isEmpty) {
-      return const Center(child: Text('No data'));
+    if (isSparkline) {
+      return SizedBox(
+        height: 80,
+        child: LineChart(
+          LineChartData(
+            gridData: FlGridData(show: false),
+            titlesData: FlTitlesData(
+              bottomTitles: AxisTitles(
+                sideTitles: showXAxis
+                    ? SideTitles(showTitles: true, reservedSize: 22)
+                    : SideTitles(showTitles: false),
+              ),
+              leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            ),
+            borderData: FlBorderData(show: false),
+            lineBarsData: [
+              LineChartBarData(
+                spots: List.generate(
+                  counts.length,
+                      (i) => FlSpot(i.toDouble(), counts[i].toDouble()),
+                ),
+                isCurved: true,
+                dotData: FlDotData(show: false),
+                color: Theme.of(context).primaryColor,
+                barWidth: 2,
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
-    // compute X and Y bounds
-    final maxX = (weeklyCounts.length - 1).toDouble();
-    final maxCount = weeklyCounts.reduce((a, b) => a > b ? a : b).toDouble();
-    final yInterval = (maxCount > 0) ? (maxCount / 5).ceilToDouble() : 1.0;
-
-    // build our spots
-    final spots = List<FlSpot>.generate(
-      weeklyCounts.length,
-          (i) => FlSpot(i.toDouble(), weeklyCounts[i].toDouble()),
-    );
-
+    // Bar chart (weekly/daily)
     return SizedBox(
-      height: 200,           // <-- FIXED height!
-      width: double.infinity,
-      child: LineChart(
-        LineChartData(
-          // enforce bounds so FL never divides by zero
-          minX: 0,
-          maxX: maxX,
-          minY: 0,
-          maxY: maxCount == 0 ? 1 : maxCount,
-
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            horizontalInterval: yInterval,
-          ),
-
+      height: 200,
+      child: BarChart(
+        BarChartData(
+          gridData: FlGridData(show: true),
           titlesData: FlTitlesData(
-            leftTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                interval: yInterval,
-                reservedSize: 30,
-              ),
-            ),
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                interval: 1,                             // one label per day
-                getTitlesWidget: _bottomTitle,
+                getTitlesWidget: (value, meta) {
+                  final idx = value.toInt();
+                  final label = idx < counts.length ? '${idx + 1}' : '';
+                  return SideTitleWidget(
+                    axisSide: meta.axisSide,
+                    child: Text(label, style: const TextStyle(fontSize: 10)),
+                  );
+                },
+                interval: 1,
               ),
             ),
+            leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true)),
           ),
-
           borderData: FlBorderData(show: false),
-
-          lineBarsData: [
-            LineChartBarData(
-              spots: spots,
-              isCurved: true,
-              barWidth: 3,
-              color: Colors.orangeAccent,
-              dotData: FlDotData(show: true),
-            ),
-          ],
+          barGroups: List.generate(counts.length, (i) {
+            return BarChartGroupData(
+              x: i,
+              barRods: [
+                BarChartRodData(
+                  toY: counts[i].toDouble(),
+                  color: Theme.of(context).primaryColor,
+                  width: 12,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ],
+            );
+          }),
         ),
       ),
-    );
-  }
-
-  Widget _bottomTitle(double value, TitleMeta meta) {
-    const labels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    final idx = value.toInt().clamp(0, labels.length - 1);
-    return SideTitleWidget(
-      axisSide: meta.axisSide,
-      child: Text(labels[idx], style: const TextStyle(color: Colors.grey, fontSize: 12)),
     );
   }
 }

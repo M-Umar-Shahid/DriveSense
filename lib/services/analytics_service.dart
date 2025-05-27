@@ -135,4 +135,43 @@ class AnalyticsService {
       'recommendation': recommendation,
     };
   }
+
+  /// Returns a list of 24 ints, one per hour of “alerts in that hour.”
+  Future<List<int>> fetchHourlyCounts(String driverId) async {
+    final now = DateTime.now();
+    final snap = await _db
+        .collection('detections')
+        .where('driverId', isEqualTo: driverId)
+        .where('timestamp', isGreaterThan: Timestamp.fromDate(now.subtract(Duration(hours: 24))))
+        .get();
+
+    final buckets = List<int>.filled(24, 0);
+    for (var doc in snap.docs) {
+      final dt = (doc['timestamp'] as Timestamp).toDate();
+      buckets[dt.hour]++;
+    }
+    return buckets;
+  }
+
+  Future<Map<DateTime,int>> fetchLast30DaysCounts(String driverId) async {
+    final today = DateTime.now();
+    final start = DateTime(today.year, today.month, today.day).subtract(Duration(days: 29));
+    final snap = await _db
+        .collection('detections')
+        .where('driverId', isEqualTo: driverId)
+        .where('timestamp', isGreaterThan: Timestamp.fromDate(start))
+        .get();
+
+    final map = <DateTime,int>{
+      for (var i = 0; i < 30; i++)
+        DateTime(start.year, start.month, start.day + i): 0
+    };
+
+    for (var doc in snap.docs) {
+      final dt = (doc['timestamp'] as Timestamp).toDate();
+      final day = DateTime(dt.year, dt.month, dt.day);
+      if (map.containsKey(day)) map[day] = map[day]! + 1;
+    }
+    return map;
+  }
 }

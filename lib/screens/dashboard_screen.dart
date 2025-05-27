@@ -1,3 +1,4 @@
+import 'package:drivesense/components/dashboard_screen_components/rounded_button.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,6 +12,8 @@ import '../screens/monitoring_screen.dart';
 import '../screens/companies_list_page.dart';
 import 'analytics_screen.dart';
 import 'package:drivesense/screens/drivers_request_page.dart';
+
+import 'chat_screen.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({Key? key}) : super(key: key);
@@ -29,6 +32,7 @@ class _DashboardPageState extends State<Dashboard>
   double _focus = 0;
   bool _openToWork = false;
   List<Trip> _recent = [];
+  late String companyId;
 
   late final AnimationController _animC;
   late final Animation<double> _fadeIn;
@@ -52,6 +56,9 @@ class _DashboardPageState extends State<Dashboard>
         .collection('users')
         .doc(_uid)
         .get();
+    final data = docSnap.data();
+    companyId = data?['company'];
+
     final recentTrips = await _svc.fetchRecentTrips(limit: 3);
 
     setState(() {
@@ -98,7 +105,22 @@ class _DashboardPageState extends State<Dashboard>
         title: const Text('DriveSense', style: TextStyle(color: Colors.blueAccent,fontWeight: FontWeight.w600,fontFamily: 'Poppins')),
         actions: [
           if (_openToWork)
-            IconButton(
+              IconButton(
+                icon: const Icon(Icons.chat_bubble_outline, color: Colors.blueAccent),
+                tooltip: "Chat with Admin",
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ChatScreen(
+                        companyId: companyId,
+                        peerId: _uid,
+                      ),
+                    ),
+                  );
+                },
+              ),
+          IconButton(
               icon: Icon(Icons.business, color: Colors.blueAccent),
               onPressed: () {
                 Navigator.push(

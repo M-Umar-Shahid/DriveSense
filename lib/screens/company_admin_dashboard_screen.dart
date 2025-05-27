@@ -1,5 +1,6 @@
 // lib/screens/company_admin_dashboard.dart
 
+import 'package:drivesense/components/dashboard_screen_components/rounded_button.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,6 +10,7 @@ import 'add_driver_screen.dart';
 import 'analytics_screen.dart';
 import 'assigned_driver_page.dart';
 import 'company_requests_page.dart';
+import 'driver_chat_list_screen.dart';
 import 'login_signup_screen.dart';
 import 'open_driver_screen.dart';
 
@@ -97,6 +99,28 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.message, color: Colors.white),
+                    tooltip: "Chat with Drivers",
+                    onPressed: () async {
+                      final uid = FirebaseAuth.instance.currentUser!.uid;
+
+                      final userSnap = await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(uid)
+                          .get();
+
+                      final userData = userSnap.data();
+                      final companyId = userData?['company'] ?? uid; // fallback to uid if missing
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DriverListScreen(companyId: companyId),
+                        ),
+                      );
+                    },
                   ),
                   IconButton(
                     icon: const Icon(Icons.mail,
