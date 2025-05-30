@@ -143,13 +143,19 @@ class AnalyticsService {
     final snap = await _db
         .collection('detections')
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         .where('driverId', isEqualTo: driverId)
 =======
+=======
+>>>>>>> Stashed changes
 <<<<<<< HEAD
         .where('uid', isEqualTo: driverId)
 =======
         .where('driverId', isEqualTo: driverId)
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
         .where('timestamp', isGreaterThan: Timestamp.fromDate(now.subtract(Duration(hours: 24))))
         .get();
@@ -168,13 +174,19 @@ class AnalyticsService {
     final snap = await _db
         .collection('detections')
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         .where('driverId', isEqualTo: driverId)
 =======
+=======
+>>>>>>> Stashed changes
 <<<<<<< HEAD
         .where('uid', isEqualTo: driverId)
 =======
         .where('driverId', isEqualTo: driverId)
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
         .where('timestamp', isGreaterThan: Timestamp.fromDate(start))
         .get();
@@ -192,7 +204,10 @@ class AnalyticsService {
     return map;
   }
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
 <<<<<<< HEAD
 
 
@@ -225,5 +240,8 @@ class AnalyticsService {
   }
 =======
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 }
