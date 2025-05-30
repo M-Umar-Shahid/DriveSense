@@ -32,69 +32,15 @@ class TrendSection extends StatelessWidget {
             ),
             borderData: FlBorderData(show: false),
             lineBarsData: [
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-=======
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-<<<<<<< HEAD
-              // For sparkline (Day view)
-=======
->>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
               LineChartBarData(
                 spots: List.generate(
                   counts.length,
                       (i) => FlSpot(i.toDouble(), counts[i].toDouble()),
                 ),
                 isCurved: true,
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
                 dotData: FlDotData(show: false),
                 color: Theme.of(context).primaryColor,
                 barWidth: 2,
-=======
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-<<<<<<< HEAD
-                gradient: LinearGradient(
-                  colors: [Theme.of(context).primaryColor, Theme.of(context).primaryColor.withOpacity(0.3)],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-                belowBarData: BarAreaData(
-                  show: true,
-                  gradient: LinearGradient(
-                    colors: [Theme.of(context).primaryColor.withOpacity(0.4), Colors.transparent],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-                dotData: FlDotData(show: true),
-=======
-                dotData: FlDotData(show: false),
-                color: Theme.of(context).primaryColor,
-                barWidth: 2,
->>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
               ),
             ],
           ),
@@ -132,37 +78,9 @@ class TrendSection extends StatelessWidget {
               barRods: [
                 BarChartRodData(
                   toY: counts[i].toDouble(),
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
                   color: Theme.of(context).primaryColor,
                   width: 12,
                   borderRadius: BorderRadius.circular(4),
-=======
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-<<<<<<< HEAD
-                  gradient: LinearGradient(
-                    colors: [Colors.blueAccent, Colors.lightBlueAccent],
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                  ),
-                  width: 14,
-                  borderRadius: BorderRadius.circular(6),
-=======
-                  color: Theme.of(context).primaryColor,
-                  width: 12,
-                  borderRadius: BorderRadius.circular(4),
->>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
                 ),
               ],
             );

@@ -14,37 +14,6 @@ class PieBreakdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = data.values.fold<int>(0, (sum, v) => sum + v);
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-=======
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-<<<<<<< HEAD
-
-    // Show placeholder if no data
-    if (data.isEmpty || total == 0) {
-      return Container(
-        height: 200,
-        alignment: Alignment.center,
-        child: const Text(
-          'No alerts for this period',
-          style: TextStyle(color: Colors.grey, fontSize: 16),
-        ),
-      );
-    }
-
-=======
->>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
     final sections = <PieChartSectionData>[];
     data.forEach((label, count) {
       final color = _colorForLabel(label);
@@ -77,27 +46,7 @@ class PieBreakdown extends StatelessWidget {
             children: data.keys.map((label) {
               return _LegendItem(
                 color: _colorForLabel(label),
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
                 label: label,
-=======
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-<<<<<<< HEAD
-                label: '$label (${data[label]})',
-=======
-                label: label,
->>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
               );
             }).toList(),
           ),
@@ -132,27 +81,7 @@ class _LegendItem extends StatelessWidget {
       children: [
         Container(width: 12, height: 12, color: color),
         const SizedBox(width: 6),
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
         Text(label),
-=======
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-<<<<<<< HEAD
-        Text(label, style: const TextStyle(fontSize: 12)),
-=======
-        Text(label),
->>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
       ],
     );
   }
