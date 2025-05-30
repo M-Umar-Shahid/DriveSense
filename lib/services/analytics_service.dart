@@ -4,11 +4,9 @@ import '../models/detection.dart';
 class AnalyticsService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Fetch the most recent [limit] detections for [driverId].
+  /// Fetch most recent detections
   Future<List<Detection>> fetchRecentDetections(
-      String driverId, {
-        int limit = 5,
-      }) async {
+      String driverId, {int limit = 5}) async {
     final snap = await _db
         .collection('detections')
         .where('uid', isEqualTo: driverId)
@@ -31,22 +29,17 @@ class AnalyticsService {
     }).toList();
   }
 
-  /// Returns a 7-element list of alert counts for each day of the week,
-  /// starting Sunday = index 0.
+  /// Weekly trends (counts per weekday)
   Future<List<int>> fetchWeeklyTrends(String driverId) async {
     final now = DateTime.now();
-    // Start from the most recent Sunday:
     final startOfWeek = now.subtract(Duration(days: now.weekday % 7));
     final snap = await _db
         .collection('detections')
         .where('uid', isEqualTo: driverId)
-        .where(
-      'timestamp',
-      isGreaterThanOrEqualTo: Timestamp.fromDate(startOfWeek),
-    )
+        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfWeek))
         .get();
 
-    List<int> counts = List.filled(7, 0);
+    var counts = List.filled(7, 0);
     for (var doc in snap.docs) {
       final ts = (doc['timestamp'] as Timestamp).toDate();
       counts[ts.weekday % 7]++;
@@ -54,21 +47,19 @@ class AnalyticsService {
     return counts;
   }
 
+  /// Monthly breakdown for given month
   Future<Map<String,int>> fetchMonthlyBreakdownForMonth(
       String driverId, DateTime month) async {
-    final startOfMonth = DateTime(month.year, month.month, 1);
-    final startOfNext =
-    DateTime(month.year, month.month + 1, 1);
+    final start = DateTime(month.year, month.month, 1);
+    final next = DateTime(month.year, month.month + 1, 1);
     final snap = await _db
         .collection('detections')
         .where('uid', isEqualTo: driverId)
-        .where('timestamp',
-        isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth))
-        .where('timestamp',
-        isLessThan: Timestamp.fromDate(startOfNext))
+        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('timestamp', isLessThan: Timestamp.fromDate(next))
         .get();
 
-    final counts = <String,int>{};
+    var counts = <String,int>{};
     for (var doc in snap.docs) {
       final type = doc['alertType'] as String? ?? 'Unknown';
       counts[type] = (counts[type] ?? 0) + 1;
@@ -76,22 +67,43 @@ class AnalyticsService {
     return counts;
   }
 
-  /// Computes totalAlerts, totalHours driven, and a recommendation string.
-  Future<Map<String, dynamic>> fetchTotals(String driverId) async {
-    // 1) All alerts
+  /// Daily counts for given month
+  Future<Map<DateTime,int>> fetchDailyCountsForMonth(
+      String driverId, DateTime month) async {
+    final start = DateTime(month.year, month.month, 1);
+    final next = DateTime(month.year, month.month + 1, 1);
+    final snap = await _db
+        .collection('detections')
+        .where('uid', isEqualTo: driverId)
+        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('timestamp', isLessThan: Timestamp.fromDate(next))
+        .get();
+
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+    var map = {
+      for (var d = 1; d <= daysInMonth; d++)
+        DateTime(month.year, month.month, d): 0
+    };
+    for (var doc in snap.docs) {
+      final dt = (doc['timestamp'] as Timestamp).toDate();
+      final day = DateTime(dt.year, dt.month, dt.day);
+      if (map.containsKey(day)) map[day] = map[day]! + 1;
+    }
+    return map;
+  }
+
+  /// Total alerts, hours, recommendation
+  Future<Map<String,dynamic>> fetchTotals(String driverId) async {
     final alertsSnap = await _db
         .collection('detections')
         .where('uid', isEqualTo: driverId)
         .get();
-
-    // 2) All trips (for hours)
     final tripsSnap = await _db
         .collection('trips')
         .where('uid', isEqualTo: driverId)
         .get();
 
-    final int totalAlerts = alertsSnap.size;
-
+    final totalAlerts = alertsSnap.size;
     double totalHours = 0;
     for (var doc in tripsSnap.docs) {
       final data = doc.data();
@@ -104,16 +116,13 @@ class AnalyticsService {
       }
     }
 
-    // 3) Most frequent alert type
-    final Map<String, int> typeCount = {};
+    var typeCount = <String,int>{};
     for (var doc in alertsSnap.docs) {
       final type = doc['alertType'] ?? 'Unknown';
       typeCount[type] = (typeCount[type] ?? 0) + 1;
     }
-    final most = typeCount.entries.fold<MapEntry<String, int>>(
-      const MapEntry('', 0),
-          (prev, curr) => curr.value > prev.value ? curr : prev,
-    );
+    final most = typeCount.entries.fold<MapEntry<String,int>>(MapEntry('',0),
+            (prev, curr) => curr.value > prev.value ? curr : prev);
 
     String recommendation;
     switch (most.key) {
@@ -137,24 +146,16 @@ class AnalyticsService {
     };
   }
 
-  /// Returns a list of 24 ints, one per hour of “alerts in that hour.”
+  /// Hourly counts last 24h
   Future<List<int>> fetchHourlyCounts(String driverId) async {
     final now = DateTime.now();
     final snap = await _db
         .collection('detections')
-<<<<<<< Updated upstream
-        .where('driverId', isEqualTo: driverId)
-=======
-<<<<<<< HEAD
         .where('uid', isEqualTo: driverId)
-=======
-        .where('driverId', isEqualTo: driverId)
->>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
->>>>>>> Stashed changes
-        .where('timestamp', isGreaterThan: Timestamp.fromDate(now.subtract(Duration(hours: 24))))
+        .where('timestamp', isGreaterThan: Timestamp.fromDate(now.subtract(Duration(hours:24))))
         .get();
 
-    final buckets = List<int>.filled(24, 0);
+    var buckets = List.filled(24,0);
     for (var doc in snap.docs) {
       final dt = (doc['timestamp'] as Timestamp).toDate();
       buckets[dt.hour]++;
@@ -162,28 +163,17 @@ class AnalyticsService {
     return buckets;
   }
 
+  /// Last 30 days counts
   Future<Map<DateTime,int>> fetchLast30DaysCounts(String driverId) async {
     final today = DateTime.now();
-    final start = DateTime(today.year, today.month, today.day).subtract(Duration(days: 29));
+    final start = DateTime(today.year, today.month, today.day).subtract(Duration(days:29));
     final snap = await _db
         .collection('detections')
-<<<<<<< Updated upstream
-        .where('driverId', isEqualTo: driverId)
-=======
-<<<<<<< HEAD
         .where('uid', isEqualTo: driverId)
-=======
-        .where('driverId', isEqualTo: driverId)
->>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
->>>>>>> Stashed changes
         .where('timestamp', isGreaterThan: Timestamp.fromDate(start))
         .get();
 
-    final map = <DateTime,int>{
-      for (var i = 0; i < 30; i++)
-        DateTime(start.year, start.month, start.day + i): 0
-    };
-
+    var map = {for (var i=0;i<30;i++) DateTime(start.year, start.month, start.day+i):0};
     for (var doc in snap.docs) {
       final dt = (doc['timestamp'] as Timestamp).toDate();
       final day = DateTime(dt.year, dt.month, dt.day);
@@ -191,40 +181,4 @@ class AnalyticsService {
     }
     return map;
   }
-<<<<<<< Updated upstream
 }
-=======
-<<<<<<< HEAD
-
-
-  Future<Map<DateTime,int>> fetchDailyCountsForMonth(
-      String driverId, DateTime month) async {
-    final startOfMonth = DateTime(month.year, month.month, 1);
-    final startOfNext =
-    DateTime(month.year, month.month + 1, 1);
-    final snap = await _db
-        .collection('detections')
-        .where('uid', isEqualTo: driverId)
-        .where('timestamp',
-        isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth))
-        .where('timestamp',
-        isLessThan: Timestamp.fromDate(startOfNext))
-        .get();
-
-    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-    final map = {
-      for (var d = 1; d <= daysInMonth; d++)
-        DateTime(month.year, month.month, d): 0
-    };
-
-    for (var doc in snap.docs) {
-      final dt = (doc['timestamp'] as Timestamp).toDate();
-      final day = DateTime(dt.year, dt.month, dt.day);
-      if (map.containsKey(day)) map[day] = map[day]! + 1;
-    }
-    return map;
-  }
-=======
->>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
-}
->>>>>>> Stashed changes
