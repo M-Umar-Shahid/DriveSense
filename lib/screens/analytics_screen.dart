@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 import 'package:calendar_heatmap/calendar_heatmap.dart';
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -15,6 +18,9 @@ import 'package:intl/intl.dart';
 import 'package:calendar_heatmap/calendar_heatmap.dart';
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -52,8 +58,11 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   List<int> _weeklyCounts = List.filled(7, 0);
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   Map<String, int> _monthlyCounts = {};
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -62,6 +71,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   Map<String, int> _monthlyCounts = {};
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -72,7 +84,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   double _hoursDelta = 0;
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 
@@ -85,6 +100,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   // month navigation state
   DateTime _currentMonth = DateTime.now();
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -99,6 +117,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   // ─── DATA LOADERS ───────────────────────────────────────────────────────────
 
   Future<void> _loadAll() async {
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
     final rec       = _svc.fetchRecentDetections(widget.driverId, limit: 5);
@@ -117,6 +136,16 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       final hourly  = _svc.fetchHourlyCounts(widget.driverId);
       final heatmap = _svc.fetchLast30DaysCounts(widget.driverId);
 
+=======
+<<<<<<< HEAD
+    try {
+      final rec     = _svc.fetchRecentDetections(widget.driverId, limit: 5);
+      final weekly  = _svc.fetchWeeklyTrends(widget.driverId);
+      final totals  = _svc.fetchTotals(widget.driverId);
+      final hourly  = _svc.fetchHourlyCounts(widget.driverId);
+      final heatmap = _svc.fetchLast30DaysCounts(widget.driverId);
+
+>>>>>>> Stashed changes
 =======
 <<<<<<< HEAD
     try {
@@ -157,6 +186,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     final heatmap   = _svc.fetchLast30DaysCounts(widget.driverId);
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -236,6 +268,11 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           ),
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+<<<<<<< HEAD
+=======
+>>>>>>> Stashed changes
 =======
 <<<<<<< HEAD
 =======
@@ -261,6 +298,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           ],
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+>>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
+>>>>>>> Stashed changes
 =======
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 >>>>>>> Stashed changes
@@ -274,7 +315,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
             tabs: [
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -283,6 +327,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
               Tab(text: 'Month'),
 =======
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -304,7 +351,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     return _buildCommonBody(
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -317,6 +367,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     );
 =======
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -329,6 +382,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         );
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+>>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
+>>>>>>> Stashed changes
 =======
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 >>>>>>> Stashed changes
@@ -341,7 +398,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     return _buildCommonBody(
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -350,6 +410,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     );
 =======
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -360,6 +423,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         );
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+>>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
+>>>>>>> Stashed changes
 =======
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 >>>>>>> Stashed changes
@@ -394,6 +461,8 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   Widget _buildCommonBody({required String title, required Widget trendWidget}) {
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
 =======
     return SafeArea(
       child: SingleChildScrollView(
@@ -401,6 +470,80 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+<<<<<<< HEAD
+            const Text('Monthly Breakdown',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+
+            // ── Month selector ────────────────────
+            MonthPicker(
+              month: DateFormat.yMMM().format(_currentMonth),
+              onPrev: () => _changeMonth(-1),
+              onNext: () => _changeMonth(1),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Charts container ──────────────────
+            Card(
+              color: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: _loadingMonth
+                // small spinner for the month section only
+                    ? SizedBox(
+                  height: 250,
+                  child: Center(
+                    child: Lottie.asset(
+                      'assets/animations/loading_animation.json',
+                      width: 80,
+                      height: 80,
+                    ),
+                  ),
+                )
+                // once loaded, show pie + heatmap
+                    : Column(
+                  children: [
+                    // ─ Pie chart ─────────────────
+                    PieBreakdown(
+                      data: _monthlyCounts,
+                      showLegend: true,
+                    ),
+                    const SizedBox(height: 24),
+
+                    // ─ Heatmap ───────────────────────
+                    // instead of package widget…
+                    buildManualHeatmap(
+                      data: _last30Days,
+                      month: _currentMonth,
+                      size: 20,
+                      baseColor: Colors.green,
+                    ),
+
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommonBody({
+    required String title,
+    required Widget trendWidget,
+  }) {
+>>>>>>> Stashed changes
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+<<<<<<< Updated upstream
 <<<<<<< HEAD
             const Text('Monthly Breakdown',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -550,6 +693,8 @@ class _AnalyticsPageState extends State<AnalyticsPage>
 <<<<<<< Updated upstream
             const Text('Metrics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
             const Text('Metrics',
@@ -558,6 +703,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
             const Text('Metrics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -571,7 +719,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
             Row(
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -605,6 +756,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                 const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
 =======
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -619,6 +773,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
             Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+>>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
+>>>>>>> Stashed changes
 =======
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 >>>>>>> Stashed changes
@@ -633,8 +791,11 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                 borderRadius: BorderRadius.circular(16),
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                 boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0, 4))],
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -643,6 +804,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                 boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0, 4))],
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -653,8 +817,11 @@ class _AnalyticsPageState extends State<AnalyticsPage>
             const SizedBox(height: 24),
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             const Text('Recent Issues', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -664,6 +831,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
             const Text('Recent Issues', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -677,7 +847,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
 
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -709,6 +882,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
 }
 =======
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -737,7 +913,12 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   String _formatDelta(double val) => val >= 0 ? '+${val.toStringAsFixed(1)}%' : '${val.toStringAsFixed(1)}%';
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 }
+=======
+}
+>>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
+>>>>>>> Stashed changes
 =======
 }
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b

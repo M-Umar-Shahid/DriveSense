@@ -16,7 +16,10 @@ class PieBreakdown extends StatelessWidget {
     final total = data.values.fold<int>(0, (sum, v) => sum + v);
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -36,6 +39,9 @@ class PieBreakdown extends StatelessWidget {
 =======
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -73,8 +79,11 @@ class PieBreakdown extends StatelessWidget {
                 color: _colorForLabel(label),
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                 label: label,
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -83,6 +92,9 @@ class PieBreakdown extends StatelessWidget {
                 label: label,
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -122,8 +134,11 @@ class _LegendItem extends StatelessWidget {
         const SizedBox(width: 6),
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         Text(label),
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -132,6 +147,9 @@ class _LegendItem extends StatelessWidget {
         Text(label),
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes

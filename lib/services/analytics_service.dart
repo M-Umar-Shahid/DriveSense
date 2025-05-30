@@ -144,8 +144,11 @@ class AnalyticsService {
         .collection('detections')
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         .where('driverId', isEqualTo: driverId)
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -154,6 +157,9 @@ class AnalyticsService {
         .where('driverId', isEqualTo: driverId)
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -175,8 +181,11 @@ class AnalyticsService {
         .collection('detections')
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         .where('driverId', isEqualTo: driverId)
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -185,6 +194,9 @@ class AnalyticsService {
         .where('driverId', isEqualTo: driverId)
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -205,7 +217,10 @@ class AnalyticsService {
   }
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -241,6 +256,9 @@ class AnalyticsService {
 =======
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes

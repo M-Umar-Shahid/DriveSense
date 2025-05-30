@@ -34,7 +34,10 @@ class TrendSection extends StatelessWidget {
             lineBarsData: [
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -42,6 +45,9 @@ class TrendSection extends StatelessWidget {
 =======
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -53,10 +59,13 @@ class TrendSection extends StatelessWidget {
                 isCurved: true,
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                 dotData: FlDotData(show: false),
                 color: Theme.of(context).primaryColor,
                 barWidth: 2,
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -80,6 +89,9 @@ class TrendSection extends StatelessWidget {
                 barWidth: 2,
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -122,10 +134,13 @@ class TrendSection extends StatelessWidget {
                   toY: counts[i].toDouble(),
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                   color: Theme.of(context).primaryColor,
                   width: 12,
                   borderRadius: BorderRadius.circular(4),
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 <<<<<<< HEAD
@@ -142,6 +157,9 @@ class TrendSection extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
 >>>>>>> 16548fd9f372664a8405d77e23307aa5fba1743b
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
