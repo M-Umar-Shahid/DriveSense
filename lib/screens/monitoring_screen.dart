@@ -243,6 +243,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     super.dispose();
   }
 
+
   void _stopAnalyzing() {
     _stopAnalyzingInternal();
     if (mounted) {
@@ -297,14 +298,13 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-
+    // Ensure the seatbelt model is loaded:
     if (_seatbeltInterpreter == null) {
-      // This will load, resize, allocate, and set _seatbeltInterpreter
       await _loadSeatbeltModel();
     }
 
     if (!_isAnalyzing) {
-      // ── START ANALYSIS ─────────────────────────────────────────
+      // ── START ANALYSIS ──────────────────────────────────
       _tripStartTime   = DateTime.now();
       _tripAlertCount  = 0;
       _tripFinalStatus = 'Safe';
@@ -326,47 +326,52 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
         'status':    'Safe',
       });
 
-      setState(() => _isAnalyzing = true);
-      _listenToFrameStream();
-    } else {
-      // ── STOP ANALYSIS ──────────────────────────────────────────
+      setState(() {
+        _isAnalyzing = true;
+      });
 
-      // 1) Cancel the frame subscription
+      // Give the SurfaceView ~100 ms to attach before subscribing:
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Only subscribe if we didn’t already subscribe:
+      if (_frameSubscription == null) {
+        _listenToFrameStream();
+      }
+    } else {
+      // ── STOP ANALYSIS ───────────────────────────────────
+      // 1) Cancel the frame subscription (if it exists)
       await _frameSubscription?.cancel();
       _frameSubscription = null;
 
-      // 2) Dispose of the Mediapipe controller if it supports stop()
-      //    (or just null it out if not)
+      // 2) Null out the Mediapipe controller so it can be recreated on resume
       _mpController = null;
 
-      // 3) Update Firestore trip document
+      // 3) Update Firestore with trip end and alerts
       if (_currentTripRef != null && _tripStartTime != null) {
         await _currentTripRef!.update({
           'endTime': Timestamp.now(),
-          'alerts': _tripAlertCount,
-          'status': _tripFinalStatus,
+          'alerts':  _tripAlertCount,
+          'status':  _tripFinalStatus,
         });
       }
       _currentTripRef = null;
 
-      // 4) Finally flip the flag so the UI switches back
+      // 4) Flip the flag so the UI switches back
       setState(() => _isAnalyzing = false);
     }
   }
 
 
   void _listenToFrameStream() {
+    // If we already have an active subscription, do nothing:
     if (_frameSubscription != null) {
       debugPrint("⚠️ Frame stream already active");
       return;
     }
 
     debugPrint("🛰️ Subscribed to frame stream");
-
     _frameSubscription = _frameStream.receiveBroadcastStream().listen(
           (event) async {
-        debugPrint("📦 Frame received");
-
         if (!_isAnalyzing) return;
 
         if (event is Uint8List) {
@@ -377,16 +382,15 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
           }
 
           _lastFrameImage = image;
-
           setState(() {
             _imageSize = Size(image.width.toDouble(), image.height.toDouble());
           });
 
-          debugPrint("🎯 Running seatbelt detection");
+          // Seatbelt detection:
           await _runSeatbeltDetection(event, image);
 
+          // Distraction detection (only if model is loaded)
           if (_modelLoaded) {
-            debugPrint("🎯 Running distraction detection");
             await _runDistractionDetection(image);
           }
         }
@@ -394,6 +398,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       onError: (e) {
         debugPrint('❌ FrameStream error: $e');
       },
+      cancelOnError: true,
     );
   }
 
@@ -639,15 +644,18 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
             child: NativeView(
               onViewCreated: (FlutterMediapipe controller) {
                 _mpController = controller;
+
+                // landmarks subscription can stay here:
                 controller.landMarksStream.listen((landmarks) {
                   if (_isAnalyzing) _onLandmarkStream(landmarks);
                 });
-                _listenToFrameStream();
+
+                // Don’t start _listenToFrameStream yet!  Wait for toggleAnalyzing()
               },
             ),
           ),
 
-          // 🔲 Overlay when _isAnalyzing is false
+          // Black overlay when not analyzing:
           if (!_isAnalyzing)
             Container(
               height: 500,
