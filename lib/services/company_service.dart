@@ -100,20 +100,35 @@ class CompanyService {
     return sum / snap.docs.length;
   }
 
-  Future<void> rateCompany(String companyId, int rating, {String? comment}) async {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    final ref = _firestore
+  Future<void> rateCompany(
+      String companyId,
+      String userId,
+      int stars, [
+        String? comment,
+      ]) async
+  {
+    final docId = userId;
+    final data = {
+      'userId':    userId,
+      'rating':    stars,
+      'timestamp': FieldValue.serverTimestamp(),
+    };
+    if (comment != null && comment.isNotEmpty) {
+      data['comment'] = comment;
+    }
+
+    // 1) Create or overwrite the user’s rating doc
+    await _firestore
         .collection('companies')
         .doc(companyId)
         .collection('ratings')
-        .doc(uid);
-    await ref.set({
-      'rating':       rating,
-      'comment':      comment ?? '',
-      'timestamp':    FieldValue.serverTimestamp(),
-      'userId':       uid,
-    });
+        .doc(docId)
+        .set(data);
+
+    // 2) Recompute avgRating in the company doc
+    await _updateCompanyAvg(companyId);
   }
+
 
   Future<double?> getMyCompanyRating(String companyId) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -148,5 +163,37 @@ class CompanyService {
     return snap.docs.map((d) => CompanyRating.fromFirestore(d)).toList();
   }
 
+  Future<int?> fetchUserRating(String companyId, String userId) async {
+    final docRef = _firestore
+        .collection('companies')
+        .doc(companyId)
+        .collection('ratings')
+        .doc(userId);
+
+    final snapshot = await docRef.get();
+    if (!snapshot.exists) return null;
+    return (snapshot.data()?['rating'] as int?);
+  }
+
+  Future<void> _updateCompanyAvg(String companyId) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('companies')
+        .doc(companyId)
+        .collection('ratings')
+        .get();
+
+    final docs = snap.docs;
+    final count = docs.length;
+    final totalStars = docs.fold<int>(
+      0,
+          (sum, doc) => sum + ((doc.data()['rating'] as int)),
+    );
+    final avg = (count == 0) ? 0.0 : totalStars / count;
+
+    await FirebaseFirestore.instance
+        .collection('companies')
+        .doc(companyId)
+        .update({'avgRating': avg});
+  }
 
 }

@@ -8,8 +8,14 @@ import '../services/company_service.dart';
 import '../services/request_service.dart';
 import 'company_detail_screen.dart';
 
-class CompaniesListPage extends StatelessWidget {
+class CompaniesListPage extends StatefulWidget {
   const CompaniesListPage({Key? key}) : super(key: key);
+  @override
+  State<CompaniesListPage> createState() => _CompaniesListPageState();
+}
+
+class _CompaniesListPageState extends State<CompaniesListPage> {
+  bool _sortDescending = true;
 
   @override
   Widget build(BuildContext context) {
@@ -25,10 +31,7 @@ class CompaniesListPage extends StatelessWidget {
     }
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
       builder: (ctx, userSnap) {
         if (userSnap.hasError) {
           return const Scaffold(
@@ -58,8 +61,7 @@ class CompaniesListPage extends StatelessWidget {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius:
-                    const BorderRadius.vertical(bottom: Radius.circular(32)),
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.1),
@@ -68,15 +70,13 @@ class CompaniesListPage extends StatelessWidget {
                       ),
                     ],
                   ),
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                   child: Column(
                     children: [
                       Row(
                         children: [
                           IconButton(
-                            icon:
-                            const Icon(Icons.arrow_back, color: Colors.white),
+                            icon: const Icon(Icons.arrow_back, color: Colors.white),
                             onPressed: () => Navigator.of(context).pop(),
                           ),
                           const Spacer(),
@@ -97,31 +97,59 @@ class CompaniesListPage extends StatelessWidget {
                   ),
                 ),
 
-                // ─── COMPANIES LIST ─────────────────────────────
+                // ─── SORT TOGGLE ───────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      const Text('Sort by:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 12),
+                      ChoiceChip(
+                        label: const Text('Highest ★'),
+                        selected: _sortDescending,
+                        onSelected: (v) {
+                          setState(() {
+                            _sortDescending = true;
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('Lowest ★'),
+                        selected: !_sortDescending,
+                        onSelected: (v) {
+                          setState(() {
+                            _sortDescending = false;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ─── COMPANIES LIST ───────────────────────────────
                 Expanded(
                   child: StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
                         .collection('companies')
+                        .orderBy('avgRating', descending: _sortDescending)
                         .snapshots(),
                     builder: (context, snap) {
                       if (snap.hasError) {
-                        return const Center(
-                            child: Text('Error loading companies'));
+                        return const Center(child: Text('Error loading companies'));
                       }
                       if (snap.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                            child: CircularProgressIndicator());
+                        return const Center(child: CircularProgressIndicator());
                       }
 
                       final docs = snap.data!.docs;
                       return Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '${docs.length} Companie${docs.length == 1 ? "" : "s"} Available',
+                              '${docs.length} Companies Available',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
@@ -133,29 +161,20 @@ class CompaniesListPage extends StatelessWidget {
                               child: ListView.separated(
                                 physics: const BouncingScrollPhysics(),
                                 itemCount: docs.length,
-                                separatorBuilder: (_, __) =>
-                                const SizedBox(height: 12),
+                                separatorBuilder: (_, __) => const SizedBox(height: 12),
                                 itemBuilder: (context, index) {
                                   final doc = docs[index];
-                                  final data =
-                                  doc.data()! as Map<String, dynamic>;
+                                  final data = doc.data()! as Map<String, dynamic>;
                                   final companyId = doc.id;
-                                  final name = data['companyName']
-                                  as String? ??
-                                      'Unnamed';
-                                  final drivers = List<String>.from(
-                                      data['driverIds'] ?? []);
+                                  final name = data['companyName'] as String? ?? 'Unnamed';
+                                  final drivers = List<String>.from(data['driverIds'] ?? []);
                                   final driverCount = drivers.length;
-
-                                  final isMember =
-                                      currentCompany == companyId;
-                                  final canJoin =
-                                      currentCompany == null && !isMember;
+                                  final isMember = currentCompany == companyId;
+                                  final canJoin = currentCompany == null && !isMember;
 
                                   return TweenAnimationBuilder<double>(
                                     tween: Tween(begin: 0, end: 1),
-                                    duration: Duration(
-                                        milliseconds: 300 + index * 100),
+                                    duration: Duration(milliseconds: 300 + index * 100),
                                     builder: (_, v, child) => Opacity(
                                       opacity: v,
                                       child: Transform.translate(
@@ -166,34 +185,21 @@ class CompaniesListPage extends StatelessWidget {
                                     child: Container(
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(
-                                          colors: [
-                                            Colors.blue.shade50,
-                                            Colors.blue.shade100
-                                          ],
+                                          colors: [Colors.blue.shade50, Colors.blue.shade100],
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
                                         ),
                                         borderRadius: BorderRadius.circular(20),
                                         boxShadow: const [
-                                          BoxShadow(
-                                            color: Colors.black12,
-                                            blurRadius: 8,
-                                            offset: Offset(0, 4),
-                                          ),
+                                          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4)),
                                         ],
                                       ),
                                       child: InkWell(
-                                        borderRadius:
-                                        BorderRadius.circular(20),
+                                        borderRadius: BorderRadius.circular(20),
                                         onTap: () {
                                           Navigator.push(
                                             context,
-                                            MaterialPageRoute(
-                                              builder: (_) =>
-                                                  CompanyDetailPage(
-                                                      companyId:
-                                                      companyId),
-                                            ),
+                                            MaterialPageRoute(builder: (_) => CompanyDetailPage(companyId: companyId)),
                                           );
                                         },
                                         child: Padding(
@@ -203,21 +209,13 @@ class CompaniesListPage extends StatelessWidget {
                                               // ── AVATAR ─────────────
                                               CircleAvatar(
                                                 radius: 28,
-                                                backgroundColor: Colors
-                                                    .blueAccent
-                                                    .withOpacity(0.1),
+                                                backgroundColor: Colors.blueAccent.withOpacity(0.1),
                                                 child: Text(
-                                                  name.isNotEmpty
-                                                      ? name[0]
-                                                      .toUpperCase()
-                                                      : '?',
-                                                  style:
-                                                  const TextStyle(
+                                                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                                  style: const TextStyle(
                                                     fontSize: 24,
-                                                    fontWeight:
-                                                    FontWeight.bold,
-                                                    color:
-                                                    Colors.blueAccent,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.blueAccent,
                                                   ),
                                                 ),
                                               ),
@@ -226,78 +224,60 @@ class CompaniesListPage extends StatelessWidget {
                                               // ── INFO ────────────────
                                               Expanded(
                                                 child: Column(
-                                                  crossAxisAlignment:
-                                                  CrossAxisAlignment
-                                                      .start,
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
                                                       name,
-                                                      style:
-                                                      const TextStyle(
-                                                          fontSize: 18,
-                                                          fontWeight:
-                                                          FontWeight
-                                                              .w600),
+                                                      style: const TextStyle(
+                                                        fontSize: 18,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
                                                     ),
-                                                    const SizedBox(
-                                                        height: 4),
+                                                    const SizedBox(height: 4),
                                                     Text(
                                                       '$driverCount driver${driverCount == 1 ? "" : "s"}',
-                                                      style:
-                                                      const TextStyle(
-                                                          fontSize: 14,
-                                                          color:
-                                                          Colors.grey),
+                                                      style: const TextStyle(fontSize: 14, color: Colors.grey),
                                                     ),
-                                                    const SizedBox(
-                                                        height: 8),
+                                                    const SizedBox(height: 8),
                                                     Row(
                                                       children: [
-                                                        FutureBuilder<double>(
-                                                          future: CompanyService()
-                                                              .getAverageCompanyRating(
-                                                              companyId),
-                                                          builder:
-                                                              (_, snap) {
-                                                            final avg =
-                                                                snap.data ??
-                                                                    0.0;
+                                                        StreamBuilder<QuerySnapshot>(
+                                                          stream: FirebaseFirestore.instance
+                                                              .collection('companies')
+                                                              .doc(companyId)
+                                                              .collection('ratings')
+                                                              .snapshots(),
+                                                          builder: (ctx, snap) {
+                                                            if (snap.hasError) {
+                                                              return const Text('Error loading reviews');
+                                                            }
+                                                            if (!snap.hasData) {
+                                                              return const SizedBox(
+                                                                width: 80,
+                                                                height: 16,
+                                                                child: LinearProgressIndicator(),
+                                                              );
+                                                            }
+
+                                                            final ratingDocs = snap.data!.docs;
+                                                            final count = ratingDocs.length;
+                                                            final totalStars = ratingDocs.fold<int>(
+                                                              0,
+                                                                  (sum, doc) => sum + ((doc.data()! as Map<String, dynamic>)['rating'] as int),
+                                                            );
+                                                            final avg = (count == 0) ? 0.0 : totalStars / count;
+
                                                             return Row(
                                                               children: [
-                                                                const Icon(
-                                                                    Icons
-                                                                        .star,
-                                                                    size: 16,
-                                                                    color: Colors
-                                                                        .amber),
-                                                                const SizedBox(
-                                                                    width:
-                                                                    4),
-                                                                Text(avg
-                                                                    .toStringAsFixed(
-                                                                    1)),
+                                                                const Icon(Icons.star, size: 16, color: Colors.amber),
+                                                                const SizedBox(width: 4),
+                                                                Text(avg.toStringAsFixed(1)),
+                                                                const SizedBox(width: 12),
+                                                                Text(
+                                                                  '($count reviews)',
+                                                                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                                                ),
                                                               ],
-                                                            );
-                                                          },
-                                                        ),
-                                                        const SizedBox(
-                                                            width: 12),
-                                                        FutureBuilder<int>(
-                                                          future: CompanyService()
-                                                              .getCompanyRatingCount(
-                                                              companyId),
-                                                          builder:
-                                                              (_, snap) {
-                                                            final count =
-                                                                snap.data ??
-                                                                    0;
-                                                            return Text(
-                                                              '($count reviews)',
-                                                              style: const TextStyle(
-                                                                  fontSize:
-                                                                  12,
-                                                                  color: Colors
-                                                                      .black54),
                                                             );
                                                           },
                                                         ),
@@ -311,205 +291,96 @@ class CompaniesListPage extends StatelessWidget {
                                               if (canJoin)
                                                 ElevatedButton(
                                                   style: ElevatedButton.styleFrom(
-                                                    backgroundColor: const Color(
-                                                        0xFF1976D2),
-                                                    shape:
-                                                    RoundedRectangleBorder(
-                                                      borderRadius:
-                                                      BorderRadius.circular(
-                                                          16),
+                                                    backgroundColor: const Color(0xFF1976D2),
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius: BorderRadius.circular(16),
                                                     ),
-                                                    padding:
-                                                    const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 20,
-                                                        vertical: 12),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                                                   ),
                                                   onPressed: () async {
-                                                    final ok =
-                                                    await RequestService()
-                                                        .sendJoinRequest(
-                                                        companyId);
-                                                    ScaffoldMessenger.of(
-                                                        context)
-                                                        .showSnackBar(
+                                                    final ok = await RequestService().sendJoinRequest(companyId);
+                                                    ScaffoldMessenger.of(context).showSnackBar(
                                                       SnackBar(
                                                         content: Row(
                                                           children: const [
-                                                            Icon(
-                                                              Icons
-                                                                  .check_circle,
-                                                              color: Colors
-                                                                  .white,
-                                                            ),
-                                                            SizedBox(
-                                                                width: 8),
+                                                            Icon(Icons.check_circle, color: Colors.white),
+                                                            SizedBox(width: 8),
                                                             Text(
                                                               'Join request sent',
-                                                              style: TextStyle(
-                                                                  color: Colors
-                                                                      .white),
+                                                              style: TextStyle(color: Colors.white),
                                                             ),
                                                           ],
                                                         ),
-                                                        backgroundColor:
-                                                        Colors.green
-                                                            .shade600,
-                                                        behavior:
-                                                        SnackBarBehavior
-                                                            .floating,
-                                                        margin:
-                                                        const EdgeInsets
-                                                            .symmetric(
-                                                            horizontal:
-                                                            16,
-                                                            vertical:
-                                                            8),
-                                                        shape:
-                                                        const RoundedRectangleBorder(
-                                                          borderRadius:
-                                                          BorderRadius.all(
-                                                            Radius.circular(12),
-                                                          ),
+                                                        backgroundColor: Colors.green.shade600,
+                                                        behavior: SnackBarBehavior.floating,
+                                                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                                        shape: const RoundedRectangleBorder(
+                                                          borderRadius: BorderRadius.all(Radius.circular(12)),
                                                         ),
-                                                        duration:
-                                                        const Duration(
-                                                            seconds: 2),
+                                                        duration: const Duration(seconds: 2),
                                                       ),
                                                     );
                                                   },
                                                   child: const Text(
                                                     'Join',
-                                                    style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 14,
-                                                      fontWeight:
-                                                      FontWeight.w600,
-                                                    ),
+                                                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
                                                   ),
                                                 )
                                               else if (isMember)
-                                                ElevatedButton.icon(
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor:
-                                                    Colors.orange
-                                                        .shade700,
-                                                    shape:
-                                                    RoundedRectangleBorder(
-                                                      borderRadius:
-                                                      BorderRadius.circular(
-                                                          16),
-                                                    ),
-                                                    padding:
-                                                    const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 20,
-                                                        vertical: 12),
-                                                  ),
-                                                  icon: const Icon(
-                                                    Icons.rate_review,
-                                                    color: Colors.white,
-                                                    size: 18,
-                                                  ),
-                                                  label: const Text(
-                                                    'Rate',
-                                                    style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 14,
-                                                      fontWeight:
-                                                      FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                  onPressed: () {
-                                                    // star-picker dialog
-                                                    int _selected = 0;
-                                                    showDialog(
-                                                      context: context,
-                                                      builder:
-                                                          (dialogCtx) {
-                                                        return StatefulBuilder(
-                                                          builder:
-                                                              (ctx, setState) {
-                                                            return AlertDialog(
-                                                              title: const Text(
-                                                                  'Rate this company'),
-                                                              content: Row(
-                                                                mainAxisAlignment:
-                                                                MainAxisAlignment
-                                                                    .center,
-                                                                children: List
-                                                                    .generate(
-                                                                    5,
-                                                                        (i) {
-                                                                      return IconButton(
-                                                                        icon:
-                                                                        Icon(
-                                                                          i <
-                                                                              _selected
-                                                                              ? Icons
-                                                                              .star
-                                                                              : Icons
-                                                                              .star_border,
-                                                                          color: Colors
-                                                                              .amber,
-                                                                          size:
-                                                                          32,
-                                                                        ),
-                                                                        onPressed:
-                                                                            () {
-                                                                          setState(
-                                                                                  () {
-                                                                                _selected =
-                                                                                    i +
-                                                                                        1;
-                                                                              });
-                                                                        },
-                                                                      );
-                                                                    }),
-                                                              ),
-                                                              actions: [
-                                                                TextButton(
-                                                                  onPressed: () =>
-                                                                      Navigator.of(ctx)
-                                                                          .pop(),
-                                                                  child: const Text(
-                                                                      'Cancel'),
-                                                                ),
-                                                                ElevatedButton(
-                                                                  onPressed:
-                                                                  _selected ==
-                                                                      0
-                                                                      ? null
-                                                                      : () async {
-                                                                    await CompanyService().rateCompany(companyId, _selected);
-                                                                    Navigator.of(ctx).pop();
-                                                                    ScaffoldMessenger.of(context)
-                                                                      ..hideCurrentSnackBar()
-                                                                      ..showSnackBar(
-                                                                        SnackBar(
-                                                                          behavior: SnackBarBehavior.floating,
-                                                                          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                                                          backgroundColor: Colors.green.shade600,
-                                                                          content: Row(
-                                                                            children: [
-                                                                              const Icon(Icons.check_circle, color: Colors.white),
-                                                                              const SizedBox(width: 8),
-                                                                              Expanded(child: Text('You rated $_selected ★', style: const TextStyle(color: Colors.white))),
-                                                                            ],
-                                                                          ),
-                                                                        ),
-                                                                      );
-                                                                  },
-                                                                  child:
-                                                                  const Text(
-                                                                    'Submit',
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            );
-                                                          },
-                                                        );
+                                                FutureBuilder<int?>(
+                                                  future: CompanyService().fetchUserRating(companyId, FirebaseAuth.instance.currentUser!.uid),
+                                                  builder: (ctx, snap) {
+                                                    // 1) Loading state: show a disabled button with spinner
+                                                    if (snap.connectionState == ConnectionState.waiting) {
+                                                      return SizedBox(
+                                                        width: 80,
+                                                        height: 36,
+                                                        child: ElevatedButton(
+                                                          onPressed: null,
+                                                          child: const SizedBox(
+                                                            width: 16,
+                                                            height: 16,
+                                                            child: CircularProgressIndicator(
+                                                              strokeWidth: 2,
+                                                              color: Colors.white,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
+                                                    // 2) Error state:
+                                                    if (snap.hasError) {
+                                                      return const Text('Error');
+                                                    }
+
+                                                    // 3) Once data has loaded:
+                                                    final existingStars = snap.data; // int? (null if not rated yet)
+                                                    final labelText = (existingStars == null) ? 'Rate' : 'Edit Rating';
+
+                                                    return ElevatedButton.icon(
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor: Colors.orange.shade700,
+                                                        shape: RoundedRectangleBorder(
+                                                          borderRadius: BorderRadius.circular(16),
+                                                        ),
+                                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                                      ),
+                                                      icon: const Icon(
+                                                        Icons.rate_review,
+                                                        color: Colors.white,
+                                                        size: 18,
+                                                      ),
+                                                      label: Text(
+                                                        labelText,
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 14,
+                                                          fontWeight: FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                      onPressed: () {
+                                                        // Open the dialog, preloading existingStars if not null
+                                                        _openRatingDialog(context, companyId, existingStars);
                                                       },
                                                     );
                                                   },
@@ -517,26 +388,16 @@ class CompaniesListPage extends StatelessWidget {
                                               else
                                                 ElevatedButton(
                                                   style: ElevatedButton.styleFrom(
-                                                    backgroundColor:
-                                                    Colors.grey,
-                                                    shape:
-                                                    RoundedRectangleBorder(
-                                                      borderRadius:
-                                                      BorderRadius.circular(
-                                                          16),
+                                                    backgroundColor: Colors.grey,
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius: BorderRadius.circular(16),
                                                     ),
-                                                    padding:
-                                                    const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 20,
-                                                        vertical: 12),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                                                   ),
                                                   onPressed: null,
                                                   child: const Text(
                                                     'Member',
-                                                    style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 14),
+                                                    style: TextStyle(color: Colors.white, fontSize: 14),
                                                   ),
                                                 ),
                                             ],
@@ -557,6 +418,129 @@ class CompaniesListPage extends StatelessWidget {
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+
+  void _openRatingDialog(
+      BuildContext context,
+      String companyId,
+      int? existingStars,
+      ) {
+    int _selected = existingStars ?? 0;
+    bool _isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return AlertDialog(
+              title: Text(
+                existingStars == null ? 'Rate this company' : 'Edit your rating',
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Star picker:
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (i) {
+                      return IconButton(
+                        icon: Icon(
+                          i < _selected ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                          size: 32,
+                        ),
+                        onPressed: _isSubmitting
+                            ? null
+                            : () {
+                          setState(() {
+                            _selected = i + 1;
+                          });
+                        },
+                      );
+                    }),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _isSubmitting ? null : () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: (_selected == 0 || _isSubmitting)
+                      ? null
+                      : () async {
+                    setState(() {
+                      _isSubmitting = true;
+                    });
+                    try {
+                      await CompanyService().rateCompany(
+                        companyId,
+                        FirebaseAuth.instance.currentUser!.uid,
+                        _selected,
+                      );
+                      Navigator.of(ctx).pop();
+                      ScaffoldMessenger.of(context)
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          SnackBar(
+                            behavior: SnackBarBehavior.floating,
+                            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            backgroundColor: Colors.green.shade600,
+                            content: Row(
+                              children: [
+                                const Icon(Icons.check_circle, color: Colors.white),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    existingStars == null
+                                        ? 'You rated $_selected ★'
+                                        : 'Rating updated to $_selected ★',
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                    } catch (e) {
+                      Navigator.of(ctx).pop();
+                      ScaffoldMessenger.of(context)
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Failed to submit rating: $e',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            backgroundColor: Colors.red.shade600,
+                          ),
+                        );
+                    } finally {
+                      setState(() {
+                        _isSubmitting = false;
+                      });
+                    }
+                  },
+                  child: _isSubmitting
+                      ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                      : Text(existingStars == null ? 'Submit' : 'Update'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
