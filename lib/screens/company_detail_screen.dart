@@ -1,14 +1,31 @@
+// lib/screens/company_detail_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:lottie/lottie.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../services/company_service.dart';
 import 'company_driver_detail_screen.dart';
 
-class CompanyDetailPage extends StatelessWidget {
+class CompanyDetailPage extends StatefulWidget {
   final String companyId;
   const CompanyDetailPage({Key? key, required this.companyId}) : super(key: key);
 
   @override
+  State<CompanyDetailPage> createState() => _CompanyDetailPageState();
+}
+
+class _CompanyDetailPageState extends State<CompanyDetailPage> {
+  final _firestore = FirebaseFirestore.instance;
+  String? adminId;
+  List<String> driverIds = [];
+
+  @override
   Widget build(BuildContext context) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final currentUid = currentUser?.uid;
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       body: Column(
@@ -49,7 +66,7 @@ class CompanyDetailPage extends StatelessWidget {
           // ─── Body: Company + Drivers Stream ───────────────────────
           Expanded(
             child: StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseFirestore.instance.collection('companies').doc(companyId).snapshots(),
+              stream: _firestore.collection('companies').doc(widget.companyId).snapshots(),
               builder: (ctx, compSnap) {
                 if (compSnap.hasError) {
                   return Center(child: Text('Error: ${compSnap.error}'));
@@ -66,8 +83,10 @@ class CompanyDetailPage extends StatelessWidget {
                 }
 
                 final data = compSnap.data!.data() as Map<String, dynamic>? ?? {};
-                final driverIds = List<String>.from(data['driverIds'] ?? []);
+                adminId = data['adminId'] as String?;
+                driverIds = List<String>.from(data['driverIds'] ?? []);
 
+                // If no drivers, show placeholder
                 if (driverIds.isEmpty) {
                   return const Center(child: Text('No drivers assigned.'));
                 }
@@ -79,6 +98,8 @@ class CompanyDetailPage extends StatelessWidget {
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (ctx, i) {
                     final id = driverIds[i];
+                    final isAdmin = (adminId != null && currentUid == adminId);
+                    final isSelf = (currentUid == id);
 
                     return TweenAnimationBuilder<double>(
                       tween: Tween(begin: 0, end: 1),
@@ -91,10 +112,14 @@ class CompanyDetailPage extends StatelessWidget {
                         ),
                       ),
                       child: StreamBuilder<DocumentSnapshot>(
-                        stream: FirebaseFirestore.instance.collection('users').doc(id).snapshots(),
-                        builder: (ctx, drvSnap) {
-                          if (drvSnap.hasError) return ListTile(title: Text('Error loading $id'));
-                          if (!drvSnap.hasData) return ListTile(title: Text('Loading...'));
+                        stream: _firestore.collection('users').doc(id).snapshots(),
+                        builder: (ctx2, drvSnap) {
+                          if (drvSnap.hasError) {
+                            return ListTile(title: Text('Error loading $id'));
+                          }
+                          if (!drvSnap.hasData) {
+                            return ListTile(title: Text('Loading...'));
+                          }
 
                           final d = drvSnap.data!.data() as Map<String, dynamic>? ?? {};
                           final name = d['displayName'] as String? ?? 'Unnamed';
@@ -103,13 +128,12 @@ class CompanyDetailPage extends StatelessWidget {
                             future: fetchStatsForUser(id),
                             builder: (context, statsSnap) {
                               if (!statsSnap.hasData) {
-                                return const SizedBox(); // or a skeleton placeholder
+                                return const SizedBox(); // or placeholder
                               }
 
                               final stats = statsSnap.data!;
                               final focusPct = stats.focusPercentage;
                               final stars = ((focusPct / 20).ceil()).clamp(1, 5);
-
 
                               return Container(
                                 decoration: BoxDecoration(
@@ -120,78 +144,138 @@ class CompanyDetailPage extends StatelessWidget {
                                   ),
                                   borderRadius: BorderRadius.circular(20),
                                   boxShadow: [
-                                    BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0,4)),
+                                    BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4)),
                                   ],
                                 ),
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(20),
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (_) => DriverDetailPage(driverId: id)),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(16),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 56,
-                                          height: 56,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            gradient: LinearGradient(
-                                              colors: [Colors.blue.shade100, Colors.blue.shade200],
-                                              begin: Alignment.topLeft,
-                                              end: Alignment.bottomRight,
-                                            ),
-                                          ),
-                                          child: Center(
-                                            child: Text(
-                                              name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                              style: const TextStyle(
-                                                fontSize: 24,
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(20),
+                                        onTap: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => DriverDetailPage(driverId: id),
                                           ),
                                         ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(16),
+                                          child: Row(
                                             children: [
-                                              Text(
-                                                name,
-                                                style: const TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w600,
+                                              Container(
+                                                width: 56,
+                                                height: 56,
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  gradient: LinearGradient(
+                                                    colors: [Colors.blue.shade100, Colors.blue.shade200],
+                                                    begin: Alignment.topLeft,
+                                                    end: Alignment.bottomRight,
+                                                  ),
+                                                ),
+                                                child: Center(
+                                                  child: Text(
+                                                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                                    style: const TextStyle(
+                                                      fontSize: 24,
+                                                      color: Colors.white,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
                                                 ),
                                               ),
-                                              const SizedBox(height: 8),
-                                              Row(
-                                                children: List.generate(5, (j) {
-                                                  return Icon(
-                                                    j < stars ? Icons.star : Icons.star_border,
-                                                    color: Colors.amber,
-                                                    size: 20,
-                                                  );
-                                                }),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                '${focusPct.toStringAsFixed(0)}% focus',
-                                                style: const TextStyle(
-                                                  fontSize: 14,
-                                                  color: Colors.grey,
+                                              const SizedBox(width: 16),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      name,
+                                                      style: const TextStyle(
+                                                        fontSize: 18,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Row(
+                                                      children: List.generate(5, (j) {
+                                                        return Icon(
+                                                          j < stars ? Icons.star : Icons.star_border,
+                                                          color: Colors.amber,
+                                                          size: 20,
+                                                        );
+                                                      }),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      '${focusPct.toStringAsFixed(0)}% focus',
+                                                      style: const TextStyle(
+                                                        fontSize: 14,
+                                                        color: Colors.grey,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
+                                              const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                                             ],
                                           ),
                                         ),
-                                        const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                                      ],
+                                      ),
                                     ),
-                                  ),
+
+                                    // ── FIRE ICON (if currentUser is admin and this is not the admin’s own entry)
+                                    if (isAdmin && !isSelf)
+                                      IconButton(
+                                        icon: const Icon(Icons.remove_circle, color: Colors.red),
+                                        onPressed: () async {
+                                          // 1) Retrieve displayName (optional, for better dialog text)
+                                          final userDoc = await FirebaseFirestore.instance
+                                              .collection('users')
+                                              .doc(id)
+                                              .get();
+                                          final memberName = (userDoc.data() as Map<String, dynamic>?)?['displayName']
+                                          as String? ??
+                                              'Employee';
+
+                                          // 2) Confirmation dialog
+                                          final confirm = await showDialog<bool>(
+                                            context: context,
+                                            builder: (ctx3) => AlertDialog(
+                                              title: const Text('Fire Employee?'),
+                                              content: Text('Are you sure you want to fire $memberName?'),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.of(ctx3).pop(false),
+                                                  child: const Text('Cancel'),
+                                                ),
+                                                TextButton(
+                                                  onPressed: () => Navigator.of(ctx3).pop(true),
+                                                  child: const Text('Fire'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+
+                                          if (confirm == true && currentUid != null) {
+                                            try {
+                                              await CompanyService().fireEmployee(
+                                                widget.companyId,
+                                                currentUid,
+                                                id,
+                                              );
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text('$memberName has been removed.')),
+                                              );
+                                            } catch (e) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text('Error: $e')),
+                                              );
+                                            }
+                                          }
+                                        },
+                                      ),
+                                  ],
                                 ),
                               );
                             },
@@ -208,22 +292,8 @@ class CompanyDetailPage extends StatelessWidget {
       ),
     );
   }
-  Future<double> getDriverFocus(String driverId) async {
-    final tripsSnap = await FirebaseFirestore.instance
-        .collection('trips')
-        .where('driverId', isEqualTo: driverId)
-        .get();
 
-    final total = tripsSnap.size;
-    if (total == 0) return 0.0;
-
-    final safeTrips = tripsSnap.docs.where((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      return data['status'] == 'Safe';
-    }).length;
-
-    return (safeTrips / total) * 100;
-  }
+  // Removed _confirmLeave(...) entirely since “Leave” logic now lives on the list page
 
   Future<DashboardStats> fetchStatsForUser(String uid) async {
     final alertsSnap = await FirebaseFirestore.instance
@@ -249,9 +319,8 @@ class CompanyDetailPage extends StatelessWidget {
       focusPercentage: focus,
     );
   }
-
-
 }
+
 class DashboardStats {
   final int alertCount;
   final int tripCount;
@@ -263,4 +332,3 @@ class DashboardStats {
     required this.focusPercentage,
   });
 }
-

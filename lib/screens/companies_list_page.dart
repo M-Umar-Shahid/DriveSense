@@ -327,63 +327,122 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
                                                   ),
                                                 )
                                               else if (isMember)
-                                                FutureBuilder<int?>(
-                                                  future: CompanyService().fetchUserRating(companyId, FirebaseAuth.instance.currentUser!.uid),
-                                                  builder: (ctx, snap) {
-                                                    // 1) Loading state: show a disabled button with spinner
-                                                    if (snap.connectionState == ConnectionState.waiting) {
-                                                      return SizedBox(
-                                                        width: 80,
-                                                        height: 36,
-                                                        child: ElevatedButton(
-                                                          onPressed: null,
-                                                          child: const SizedBox(
-                                                            width: 16,
-                                                            height: 16,
-                                                            child: CircularProgressIndicator(
-                                                              strokeWidth: 2,
+                                                Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    // ── (A) Rate / Edit Button ───────────────────
+                                                    FutureBuilder<int?>(
+                                                      future: CompanyService().fetchUserRating(
+                                                        companyId,
+                                                        FirebaseAuth.instance.currentUser!.uid,
+                                                      ),
+                                                      builder: (ctx, snap) {
+                                                        // 1) Loading: disabled button with spinner
+                                                        if (snap.connectionState == ConnectionState.waiting) {
+                                                          return SizedBox(
+                                                            width: 100,
+                                                            height: 36,
+                                                            child: ElevatedButton(
+                                                              onPressed: null,
+                                                              child: const SizedBox(
+                                                                width: 16,
+                                                                height: 16,
+                                                                child: CircularProgressIndicator(
+                                                                  strokeWidth: 2,
+                                                                  color: Colors.white,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          );
+                                                        }
+                                                        // 2) Error:
+                                                        if (snap.hasError) {
+                                                          return const Text('Error');
+                                                        }
+
+                                                        // 3) Data loaded:
+                                                        final existingStars = snap.data; // int? (null if not rated yet)
+                                                        final labelText = (existingStars == null) ? 'Rate' : 'Edit Rating';
+
+                                                        return ElevatedButton.icon(
+                                                          style: ElevatedButton.styleFrom(
+                                                            minimumSize: const Size(120,0),
+                                                            backgroundColor: Colors.orange.shade700,
+                                                            shape: RoundedRectangleBorder(
+                                                              borderRadius: BorderRadius.circular(16),
+                                                            ),
+                                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                                          ),
+                                                          label: Text(
+                                                            labelText,
+                                                            style: const TextStyle(
                                                               color: Colors.white,
+                                                              fontSize: 14,
+                                                              fontWeight: FontWeight.w600,
                                                             ),
                                                           ),
-                                                        ),
-                                                      );
-                                                    }
-                                                    // 2) Error state:
-                                                    if (snap.hasError) {
-                                                      return const Text('Error');
-                                                    }
+                                                          onPressed: () {
+                                                            // Open the rating dialog, passing existingStars
+                                                            _openRatingDialog(context, companyId, existingStars);
+                                                          },
+                                                        );
+                                                      },
+                                                    ),
 
-                                                    // 3) Once data has loaded:
-                                                    final existingStars = snap.data; // int? (null if not rated yet)
-                                                    final labelText = (existingStars == null) ? 'Rate' : 'Edit Rating';
+                                                    const SizedBox(width: 8),
 
-                                                    return ElevatedButton.icon(
+                                                    // ── (B) Leave Button ───────────────────────────
+                                                    ElevatedButton(
                                                       style: ElevatedButton.styleFrom(
-                                                        backgroundColor: Colors.orange.shade700,
+                                                        minimumSize: const Size(120,0),
+                                                        backgroundColor: Colors.red.shade600,
                                                         shape: RoundedRectangleBorder(
                                                           borderRadius: BorderRadius.circular(16),
                                                         ),
-                                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                                       ),
-                                                      icon: const Icon(
-                                                        Icons.rate_review,
-                                                        color: Colors.white,
-                                                        size: 18,
-                                                      ),
-                                                      label: Text(
-                                                        labelText,
-                                                        style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 14,
-                                                          fontWeight: FontWeight.w600,
-                                                        ),
-                                                      ),
-                                                      onPressed: () {
-                                                        // Open the dialog, preloading existingStars if not null
-                                                        _openRatingDialog(context, companyId, existingStars);
+                                                      onPressed: () async {
+                                                        // 1) Confirm “Leave Company?”
+                                                        final confirm = await showDialog<bool>(
+                                                          context: context,
+                                                          builder: (ctx) => AlertDialog(
+                                                            title: const Text('Leave Company?'),
+                                                            content: const Text('Are you sure you want to leave this company?'),
+                                                            actions: [
+                                                              TextButton(
+                                                                onPressed: () => Navigator.of(ctx).pop(false),
+                                                                child: const Text('Cancel'),
+                                                              ),
+                                                              TextButton(
+                                                                onPressed: () => Navigator.of(ctx).pop(true),
+                                                                child: const Text('Leave'),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        );
+                                                        if (confirm == true) {
+                                                          try {
+                                                            // 2) Call the service to leave
+                                                            await CompanyService().leaveCompany(
+                                                              companyId,
+                                                              FirebaseAuth.instance.currentUser!.uid,
+                                                            );
+                                                            ScaffoldMessenger.of(context).showSnackBar(
+                                                              const SnackBar(content: Text('You have left the company.')),
+                                                            );
+                                                          } catch (e) {
+                                                            ScaffoldMessenger.of(context).showSnackBar(
+                                                              SnackBar(content: Text('Error leaving company: $e')),
+                                                            );
+                                                          }
+                                                        }
                                                       },
-                                                    );
-                                                  },
+                                                      child: const Text(
+                                                        'Leave',
+                                                        style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 )
                                               else
                                                 ElevatedButton(
