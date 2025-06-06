@@ -6,7 +6,7 @@ class UserProfile {
   final String email;
   final String role;
   final bool openToWork;
-  final String? company;     // ← nullable
+  final String? company;
 
   UserProfile({
     required this.uid,

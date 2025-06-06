@@ -300,7 +300,11 @@ class _DashboardPageState extends State<Dashboard>
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const MonitoringPage()),
-              );
+              ).then((_) {
+                // Called when MonitoringPage is popped (even with system back)
+                _loadData(); // 🔁 refresh dashboard data
+              });
+
             },
           ),
         ),

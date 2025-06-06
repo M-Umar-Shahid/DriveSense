@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:math' as math;
 import 'package:drivesense/screens/main_app_screen.dart';
@@ -12,12 +13,12 @@ import 'package:flutter_mediapipe/gen/landmark.pb.dart';
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-
+import 'package:wakelock_plus/wakelock_plus.dart';
+import '../model_inference/seatbelt_isolate.dart';
 import '../utils/distraction_detector.dart';
 import 'dashboard_screen.dart';
 
 
-// ── 1) Constants ───────────────────────────────────────────
 const int maxDet = 8400;
 const double detectionThreshold = 0.5;
 Size _imageSize = Size.zero;
@@ -115,8 +116,10 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   img.Image? _lastFrameImage;
   int _cameraViewKey = 0;
   FlutterMediapipe? _mpController;
-  Interpreter? _seatbeltInterpreter;
+  Uint8List? _latestSeatbeltJpeg;
+
   StreamSubscription? _frameSubscription;
+  StreamSubscription? _fromIsolateSubscription;
   static const EventChannel _frameStream = EventChannel("flutter_mediapipe/frameStream");
   int? _cameraViewId;
   final _detector = DistractionDetector();
@@ -124,6 +127,24 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   bool _isDistracted = false;
   String? _currentDistractionLabel;
   double _currentDistractionConfidence = 0.0;
+  // ── 1a) EAR/MR thresholds (per Reddy et al. 2024):
+  static const double _earThreshold = 0.15;   // eye aspect ratio threshold
+  static const double _mrThreshold  = 0.3;    // mouth ratio threshold
+
+  static const int _eyeClosureFrameThreshold  = 20;  // 20 consecutive frames → drowsy
+  static const int _yawnFrameThreshold        = 20;  // 36 consecutive frames → yawning
+
+  // ── 1b) Runtime frame counters (initialized to zero):
+  int _eyeClosedFrameCount = 0;
+  int _yawningFrameCount   = 0;
+
+
+  SendPort? _seatbeltSendPort;          // to send frames to the isolate
+  late final ReceivePort _fromIsolate;  // to receive bounding boxes back
+  Isolate? _seatbeltIsolate;            // the spawned Isolate
+  bool _seatbeltIsolateReady = false;   // true once the isolate sends us its SendPort
+
+
   final List<String> distractionLabels = [
     "Drinking",
     "Eating",
@@ -138,10 +159,10 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   String? _currentAlert;
   final Map<String, DateTime> _lastSpoken = {};
   final Map<String, Duration> _cooldowns = {
-    'seatbelt':   Duration(seconds: 30),
-    'distraction':Duration(seconds: 30),
-    'drowsy':     Duration(minutes: 1),
-    'yawning':    Duration(minutes: 1),
+    'seatbelt':   Duration(seconds: 20),
+    'drowsy':     Duration(seconds: 20),
+    'distraction':Duration(seconds: 20),
+    'yawning':    Duration(seconds: 20),
   };
 
 
@@ -162,11 +183,9 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadSeatbeltModel();
-    _detector.loadModel().then((_) {
-      _modelLoaded = true;
-      debugPrint('✅ Distraction model loaded');
-    });
+
+    WakelockPlus.enable();
+
 
     _tts = FlutterTts()
       ..setLanguage("en-US")
@@ -175,6 +194,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       ..setPitch(1.0)
       ..setCompletionHandler(_onUtteranceComplete);
   }
+
 
   void _onUtteranceComplete() {
     // once a message finishes, clear current
@@ -234,12 +254,16 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _tts.stop();
     _stopAnalyzing();
     _frameSubscription?.cancel();
     _mpController = null;
-    _seatbeltInterpreter?.close();
+    _seatbeltIsolate?.kill(priority: Isolate.immediate);
+    _seatbeltIsolate = null;
+    _fromIsolateSubscription?.cancel();
+    _fromIsolate.close();
+    WidgetsBinding.instance.removeObserver(this);
+    WakelockPlus.disable();
     super.dispose();
   }
 
@@ -258,6 +282,61 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     }
     _mpController = null;
   }
+
+  void _spawnSeatbeltIsolate () async{
+    print("🚀 [Main] Spawning seatbelt isolate...");
+
+    final modelBytes = await rootBundle.load('assets/models/seatbelt.tflite');
+    final modelUint8 = modelBytes.buffer.asUint8List();
+
+    _fromIsolate = ReceivePort();
+
+    Isolate.spawn<List<dynamic>>(
+      seatbeltIsolateEntry,
+      [_fromIsolate.sendPort, modelUint8],
+    ).then((isolateRef) {
+      _seatbeltIsolate = isolateRef;
+
+      _fromIsolateSubscription = _fromIsolate.listen((message) async {
+        if (message is SendPort) {
+          _seatbeltSendPort = message;
+          _seatbeltIsolateReady = true;
+          print("✅ [Main] Received isolate’s SendPort; seatbelt isolate is ready.");
+        } else if (message is Map<String, dynamic>) {
+          final bool noSeat = message['noSeatbelt'] as bool;
+          final List<dynamic> rawBoxes = message['boxes'] as List<dynamic>;
+          print("⬅️ [Main] Got seatbelt data: noSeat=$noSeat, rawBoxesCount=${rawBoxes.length}");
+
+          if (noSeat && _latestSeatbeltJpeg != null && _canSave("NoSeatbelt")) {
+            final decoded = img.decodeImage(_latestSeatbeltJpeg!);
+            if (decoded != null) {
+              _addRecentAlert("No Seatbelt");
+              await _saveDetectionSnapshot(image: decoded, alertType: "No Seatbelt");
+            }
+          }
+
+          final List<Rect> scaledBoxes = rawBoxes.map<Rect>((b) {
+            final double l = (b['left'] as num).toDouble();
+            final double t = (b['top'] as num).toDouble();
+            final double r = (b['right'] as num).toDouble();
+            final double bb = (b['bottom'] as num).toDouble();
+            return Rect.fromLTRB(l, t, r, bb);
+          }).toList();
+
+          if (mounted) {
+            setState(() {
+              _noSeatbelt = noSeat;
+              _noSeatbeltBoxes = scaledBoxes;
+            });
+            print("🏁 [Main] Updated _noSeatbelt=$_noSeatbelt, boxesLen=${scaledBoxes.length}");
+          }
+        }
+      });
+    }).catchError((e, st) {
+      print("🚨 [Main] Failed to spawn isolate: $e\n$st");
+    });
+  }
+
 
 
   @override
@@ -287,21 +366,21 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     }
   }
 
-  Future<void> _loadSeatbeltModel() async {
-    _seatbeltInterpreter = await Interpreter.fromAsset('assets/models/seatbelt.tflite');
-    debugPrint('✅ Seatbelt model loaded');
-    // ← Trigger a rebuild so the button sees the non-null interpreter
-    if (mounted) setState(() {});
-  }
+  // Future<void> _loadSeatbeltModel() async {
+  //   _seatbeltInterpreter = await Interpreter.fromAsset('assets/models/seatbelt.tflite');
+  //   debugPrint('✅ Seatbelt model loaded');
+  //   // ← Trigger a rebuild so the button sees the non-null interpreter
+  //   if (mounted) setState(() {});
+  // }
 
   Future<void> toggleAnalyzing() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     // Ensure the seatbelt model is loaded:
-    if (_seatbeltInterpreter == null) {
-      await _loadSeatbeltModel();
-    }
+    // if (_seatbeltInterpreter == null) {
+    //   await _loadSeatbeltModel();
+    // }
 
     if (!_isAnalyzing) {
       // ── START ANALYSIS ──────────────────────────────────
@@ -376,25 +455,33 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
 
         if (event is Uint8List) {
           final image = img.decodeImage(event);
-          if (image == null) {
-            debugPrint('⚠️ Failed to decode image');
-            return;
-          }
-
+          if (image == null) return;
           _lastFrameImage = image;
           setState(() {
             _imageSize = Size(image.width.toDouble(), image.height.toDouble());
           });
 
-          // Seatbelt detection:
-          await _runSeatbeltDetection(event, image);
+          if (_seatbeltIsolateReady && _seatbeltSendPort != null) {
+            final resizedForModel = img.copyResize(image, width: 640, height: 640);
+            final inferenceJpeg = Uint8List.fromList(img.encodeJpg(resizedForModel));
 
-          // Distraction detection (only if model is loaded)
+            final originalJpeg = Uint8List.fromList(img.encodeJpg(image));
+
+            _latestSeatbeltJpeg = originalJpeg;
+
+            _seatbeltSendPort!.send(<String, dynamic>{
+              'replyPort': _fromIsolate.sendPort,
+              'imageBytes': inferenceJpeg,
+            });
+            debugPrint("📤 Sent a frame into seatbelt isolate");
+          }
+
           if (_modelLoaded) {
             await _runDistractionDetection(image);
           }
         }
-      },
+
+          },
       onError: (e) {
         debugPrint('❌ FrameStream error: $e');
       },
@@ -432,127 +519,77 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   }
 
 
-  Future<void> _runSeatbeltDetection(Uint8List frameBytes, img.Image thisFrame) async {
-    debugPrint("🎯 Running seatbelt detection");
-
-    if (_seatbeltInterpreter == null) return;
-
-    // 1️⃣ Preprocess & run inference (implicitly allocates once)
-    final input  = _preprocessImage(frameBytes);
-    final output = List.generate(1, (_) => List.generate(5, (_) => List.filled(8400, 0.0)));
-    _seatbeltInterpreter!.run(input, output);
-
-    // 2️⃣ Split out the xywh+conf
-    final raw    = output[0];
-    final cxArr  = raw[0];
-    final cyArr  = raw[1];
-    final wArr   = raw[2];
-    final hArr   = raw[3];
-    final cfArr  = raw[4];
-
-    // 3️⃣ Build detection rects
-    final dets = <Rect>[];
-    final fW   = thisFrame.width.toDouble();
-    final fH   = thisFrame.height.toDouble();
-    for (var i = 0; i < 8400; i++) {
-      if (cfArr[i] > detectionThreshold) {
-        dets.add(Rect.fromCenter(
-          center: Offset(cxArr[i] * fW, cyArr[i] * fH),
-          width:  wArr[i] * fW,
-          height: hArr[i] * fH,
-        ));
-      }
-    }
-
-    // 4️⃣ Track via MiniSort
-    final tracks = _tracker.update(dets);
-
-    // 5️⃣ Update UI
-    setState(() {
-      _noSeatbeltBoxes = tracks.map((t) => t.box).toList();
-      _noSeatbelt      = tracks.isEmpty;
-    });
-    _updateAlertSpeech();
-
-    // 7️⃣ Snapshot on violation
-    if (_canSave("NoSeatbelt")) {
-      _addRecentAlert("No Seatbelt");
-      await _saveDetectionSnapshot(
-        image:     thisFrame,
-        alertType: "No Seatbelt",
-      );
-    }
-  }
-
-  List<List<List<List<double>>>> _preprocessImage(Uint8List imageBytes) {
-    final original = img.decodeImage(imageBytes)!;
-    final resized  = img.copyResize(original, width: 640, height: 640);
-
-    // batch of 1 × 640 × 640 × 3
-    return List.generate(1, (_) =>
-        List.generate(640, (_) =>
-            List.generate(640, (_) =>
-                List.filled(3, 0.0),
-            ),
-        ),
-    )..forEach((batch) {
-      for (var y = 0; y < 640; y++) {
-        for (var x = 0; x < 640; x++) {
-          final px = resized.getPixel(x, y);
-          batch[y][x][0] = px.getChannel(img.Channel.red)   / 255.0;
-          batch[y][x][1] = px.getChannel(img.Channel.green) / 255.0;
-          batch[y][x][2] = px.getChannel(img.Channel.blue)  / 255.0;
-        }
-      }
-    });
-  }
-
   void _onLandmarkStream(NormalizedLandmarkList landmarkList) {
     if (!_isAnalyzing) return;
 
-    final left     = _calculateEyeOpenness(landmarkList, leftEyeIndices);
-    final right    = _calculateEyeOpenness(landmarkList, rightEyeIndices);
-    final average  = (left + right) / 2;
-    final mouthOpen= _calculateMouthOpenness(landmarkList, mouthIndices);
+    // 1) Compute current EAR (eye aspect ratio) and MR (mouth ratio):
+    final leftEAR  = _calculateEyeOpenness(landmarkList, leftEyeIndices);
+    final rightEAR = _calculateEyeOpenness(landmarkList, rightEyeIndices);
+    final averageEAR = (leftEAR + rightEAR) / 2.0;
 
+    final mouthRatio = _calculateMouthOpenness(landmarkList, mouthIndices);
+
+
+
+    // 2) Update UI‐state for progress indicators (optional)
     setState(() {
-      _averageEyeOpenness = average;
-      _mouthOpenness      = mouthOpen;
+      _averageEyeOpenness = averageEAR;
+      _mouthOpenness      = mouthRatio;
     });
 
-    // —— DROWSY ——
-    if (average < 0.12) {
-      _eyesClosedSince ??= DateTime.now();
-      if (DateTime.now().difference(_eyesClosedSince!) >= const Duration(milliseconds: 100)) {
-        if (_canSave("Drowsy") && !_isDrowsy && _lastFrameImage != null) {
-          setState(() => _isDrowsy = true);
-          _addRecentAlert("Drowsy detected");
-          _saveDetectionSnapshot(image: _lastFrameImage!, alertType: "Drowsy");
-          _updateAlertSpeech();            // ← speak or queue the “drowsy” message
-        }
-      }
+    // ───────────────────────────────────────────────────────────
+    // —— DROWSY LOGIC (EAR < 0.25 for 20 consecutive frames) ——
+    if (averageEAR < _earThreshold) {
+      _eyeClosedFrameCount++;
     } else {
-      _eyesClosedSince = null;
+      _eyeClosedFrameCount = 0;
       if (_isDrowsy) {
+        // If previously flagged as drowsy but now eyes opened, clear:
         setState(() => _isDrowsy = false);
-        _updateAlertSpeech();            // ← stop or switch to another alert
+        _updateAlertSpeech(); // allow speech system to switch/stop
       }
     }
 
-    // —— YAWNING ——
-    if (mouthOpen > 0.35) {
-      if (_canSave("Yawning") && !_isYawning && _lastFrameImage != null) {
+    // Once we’ve seen EAR below threshold for 20 frames straight:
+    if (_eyeClosedFrameCount >= _eyeClosureFrameThreshold) {
+      // Only trigger once per “drowsy event”:
+      if (!_isDrowsy && _lastFrameImage != null && _canSave("Drowsy")) {
+        debugPrint("👁️ EAR: $averageEAR");
+        setState(() => _isDrowsy = true);
+        _addRecentAlert("Drowsy detected");
+        _saveDetectionSnapshot(image: _lastFrameImage!, alertType: "Drowsy");
+        _updateAlertSpeech(); // speak “drowsy” message
+      }
+    }
+
+    // ───────────────────────────────────────────────────────────
+    // —— YAWNING LOGIC (MR > 0.3 for 36 consecutive frames) ——
+    if (mouthRatio > _mrThreshold) {
+      _yawningFrameCount++;
+      debugPrint("😮 Yawning Frame Count: $_yawningFrameCount");
+    } else {
+      _yawningFrameCount = 0;
+      if (_isYawning) {
+        // If previously flagged yawning but mouth ratio dropped, clear:
+        setState(() => _isYawning = false);
+        _updateAlertSpeech(); // allow speech system to switch/stop
+      }
+    }
+
+    // Once MR > threshold for 36 frames straight:
+    if (_yawningFrameCount >= _yawnFrameThreshold) {
+      // Only trigger once per “yawning event”:
+      if (!_isYawning && _lastFrameImage != null && _canSave("Yawning")) {
         setState(() => _isYawning = true);
         _addRecentAlert("Yawning detected");
         _saveDetectionSnapshot(image: _lastFrameImage!, alertType: "Yawning");
-        _updateAlertSpeech();            // ← speak or queue the “yawning” message
-      }
-    } else {
-      if (_isYawning) {
-        setState(() => _isYawning = false);
-        _updateAlertSpeech();            // ← stop or switch to another alert
+        _updateAlertSpeech(); // speak “yawning” message
       }
     }
+
+    // ───────────────────────────────────────────────────────────
+    // After updating both drowsy/yawn, let the speech logic pick the highest priority:
+    _updateAlertSpeech();
   }
 
 
@@ -642,17 +679,19 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
             height: 500,
             width: 300,
             child: NativeView(
-              onViewCreated: (FlutterMediapipe controller) {
+              onViewCreated: (controller) {
                 _mpController = controller;
 
-                // landmarks subscription can stay here:
                 controller.landMarksStream.listen((landmarks) {
                   if (_isAnalyzing) _onLandmarkStream(landmarks);
                 });
 
-                // Don’t start _listenToFrameStream yet!  Wait for toggleAnalyzing()
+                if (!_seatbeltIsolateReady) {
+                  _spawnSeatbeltIsolate(); // ✅ safe to spawn here
+                }
               },
             ),
+
           ),
 
           // Black overlay when not analyzing:
@@ -670,7 +709,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
                   children: [
                     Icon(Icons.camera_alt, color: Colors.grey, size: 100),
                     SizedBox(height: 10),
-                    Text('Camera not active', style: TextStyle(color: Colors.white)),
+                    Text('Not Analyzing Yet', style: TextStyle(color: Colors.white)),
                   ],
                 ),
               ),
@@ -748,11 +787,11 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
                 const SizedBox(height: 20),
                 Center(
                   child: ElevatedButton(
-                    onPressed: (_seatbeltInterpreter != null || _isAnalyzing)
-                        ? toggleAnalyzing
-                        : null,  // disabled while _seatbeltInterpreter is null
+                    onPressed: toggleAnalyzing,
+                    // (always enabled once the page is visible, because the isolate is loading in parallel)
                     child: Text(_isAnalyzing ? 'Stop Analyzing' : 'Start Analyzing'),
                   ),
+
                 ),
                 const SizedBox(height: 20),
                 const Text("Driver's Status", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
