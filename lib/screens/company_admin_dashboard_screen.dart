@@ -32,9 +32,7 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
   @override
   void initState() {
     super.initState();
-    _companyRef = FirebaseFirestore.instance
-        .collection('companies')
-        .doc(companyId);
+    _companyRef = FirebaseFirestore.instance.collection('companies').doc(companyId);
   }
 
   Future<void> _logout() async {
@@ -43,6 +41,38 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
       MaterialPageRoute(builder: (_) => const LoginSignupPage()),
           (_) => false,
     );
+  }
+
+  Future<void> _confirmFire(
+      BuildContext context,
+      String driverId,
+      String driverName,
+      ) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Fire Employee?'),
+        content: Text('Are you sure you want to remove $driverName?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Fire')),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final adminId = FirebaseAuth.instance.currentUser!.uid;
+        await _svc.fireEmployee(companyId, adminId, driverId);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$driverName has been removed')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error firing employee: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -83,11 +113,9 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius:
-                BorderRadius.vertical(bottom: Radius.circular(32)),
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
               ),
-              padding:
-              const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
               child: Row(
                 children: [
                   Expanded(
@@ -112,37 +140,36 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
                           .get();
 
                       final userData = userSnap.data();
-                      final companyId = userData?['company'] ?? uid; // fallback to uid if missing
+                      final companyIdLocal = userData?['company'] ?? uid;
 
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => DriverListScreen(companyId: companyId),
+                          builder: (_) => DriverListScreen(companyId: companyIdLocal),
                         ),
                       );
                     },
                   ),
                   IconButton(
-                    icon: const Icon(Icons.mail,
-                        color: Colors.white), onPressed: () {Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => CompanyRequestsPage(companyId: companyId)));
-                  },
-
+                    icon: const Icon(Icons.mail, color: Colors.white),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CompanyRequestsPage(companyId: companyId),
+                        ),
+                      );
+                    },
                   ),
                   IconButton(
-                    icon: const Icon(Icons.exit_to_app,
-                        color: Colors.white),
+                    icon: const Icon(Icons.exit_to_app, color: Colors.white),
                     onPressed: () => showDialog(
                       context: context,
                       builder: (d) => AlertDialog(
                         title: const Text('Log out?'),
-                        content: const Text(
-                            'Are you sure you want to log out?'),
+                        content: const Text('Are you sure you want to log out?'),
                         actions: [
-                          TextButton(
-                              onPressed: () => Navigator.pop(d),
-                              child: const Text('Cancel')),
+                          TextButton(onPressed: () => Navigator.pop(d), child: const Text('Cancel')),
                           TextButton(
                               onPressed: () {
                                 Navigator.pop(d);
@@ -244,8 +271,10 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
                         itemCount: docs.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (_, i) {
-                          final m  = docs[i].data() as Map<String, dynamic>;
+                          final m = docs[i].data() as Map<String, dynamic>;
                           final id = docs[i].id;
+                          final displayName = m['displayName'] as String? ?? 'No name';
+
                           return Container(
                             decoration: BoxDecoration(
                               color: Colors.white,
@@ -253,37 +282,46 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
                               boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
                             ),
                             child: ListTile(
-                              title: Text(m['displayName'] ?? 'No name'),
+                              title: Text(displayName),
                               subtitle: Text(m['email'] ?? ''),
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(builder: (_) => AnalyticsPage(driverId: id)),
                               ),
-                              trailing: FutureBuilder<double>(
-                                future: _svc.getAverageRating(id),
-                                builder: (c, r) {
-                                  final rr = r.data?.toStringAsFixed(1) ?? '0.0';
-                                  return ConstrainedBox(
-                                    // give the trailing a max width
-                                    constraints: const BoxConstraints(maxWidth: 60),
-                                    child: Container(
-                                      alignment: Alignment.center, // center the contents
-                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.amber.shade100,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.star, color: Colors.amber, size: 16),
-                                          const SizedBox(width: 2),
-                                          Text(rr, style: const TextStyle(fontSize: 14)),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  FutureBuilder<double>(
+                                    future: _svc.getAverageRating(id),
+                                    builder: (c, r) {
+                                      final rr = r.data?.toStringAsFixed(1) ?? '0.0';
+                                      return ConstrainedBox(
+                                        constraints: const BoxConstraints(maxWidth: 60),
+                                        child: Container(
+                                          alignment: Alignment.center,
+                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.amber.shade100,
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.star, color: Colors.amber, size: 16),
+                                              const SizedBox(width: 2),
+                                              Text(rr, style: const TextStyle(fontSize: 14)),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: const Icon(Icons.remove_circle, color: Colors.red),
+                                    onPressed: () => _confirmFire(context, id, displayName),
+                                  ),
+                                ],
                               ),
                             ),
                           );
@@ -329,8 +367,7 @@ class _OverviewCard extends StatelessWidget {
               children: [
                 Icon(icon, size: 28, color: Colors.blueAccent),
                 const SizedBox(height: 8),
-                Text(value,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 Text(label, style: const TextStyle(color: Colors.grey)),
               ],
