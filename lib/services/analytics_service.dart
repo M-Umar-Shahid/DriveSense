@@ -32,20 +32,31 @@ class AnalyticsService {
   /// Weekly trends (counts per weekday)
   Future<List<int>> fetchWeeklyTrends(String driverId) async {
     final now = DateTime.now();
-    final startOfWeek = now.subtract(Duration(days: now.weekday % 7));
+    // cover last 7 days: 6 days ago → today
+    final cutOff = DateTime(now.year, now.month, now.day)
+        .subtract(const Duration(days: 6));
+
     final snap = await _db
         .collection('detections')
         .where('uid', isEqualTo: driverId)
-        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfWeek))
+        .where('timestamp',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(cutOff))
         .get();
 
-    var counts = List.filled(7, 0);
+    // buckets[0] = count from cutOff day, buckets[6] = today
+    var buckets = List<int>.filled(7, 0);
     for (var doc in snap.docs) {
-      final ts = (doc['timestamp'] as Timestamp).toDate();
-      counts[ts.weekday % 7]++;
+      final dt = (doc['timestamp'] as Timestamp).toDate();
+      // normalize to midnight
+      final day = DateTime(dt.year, dt.month, dt.day);
+      final idx = day.difference(cutOff).inDays;
+      if (idx >= 0 && idx < 7) {
+        buckets[idx]++;
+      }
     }
-    return counts;
+    return buckets;
   }
+
 
   /// Monthly breakdown for given month
   Future<Map<String,int>> fetchMonthlyBreakdownForMonth(

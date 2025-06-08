@@ -78,13 +78,13 @@ class PieBreakdown extends StatelessWidget {
   Color _colorForLabel(String label) {
     switch (label) {
       case 'Drowsy':
-        return Colors.orange;
+        return Colors.indigoAccent;
       case 'Distraction':
         return Colors.red;
       case 'Yawning':
-        return Colors.blue;
+        return Colors.redAccent;
       default:
-        return Colors.grey;
+        return Colors.orange;
     }
   }
 }

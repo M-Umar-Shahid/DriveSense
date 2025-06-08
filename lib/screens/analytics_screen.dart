@@ -1,14 +1,17 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 import '../../models/detection.dart';
 import '../../services/analytics_service.dart';
 import '../components/analytics_screen_components/build_manual_heatmap.dart';
+import '../components/analytics_screen_components/day_analytics_view.dart';
+import '../components/analytics_screen_components/metric_card.dart';
 import '../components/analytics_screen_components/metrics_section.dart';
 import '../components/analytics_screen_components/month_picker.dart';
-import '../components/analytics_screen_components/trend_section.dart';
 import '../components/analytics_screen_components/pie_breakdown.dart';
 import '../components/analytics_screen_components/recent_detections_list.dart';
 
@@ -20,27 +23,31 @@ class AnalyticsPage extends StatefulWidget {
   State<AnalyticsPage> createState() => _AnalyticsPageState();
 }
 
-class _AnalyticsPageState extends State<AnalyticsPage>
-    with TickerProviderStateMixin {
+class _AnalyticsPageState extends State<AnalyticsPage> {
   final _svc = AnalyticsService();
 
-  bool _loading = true;
-  bool _loadingMonth = true;
+  // Loading flags
+  bool _loading = true, _loadingMonth = true;
 
-  int _totalAlerts = 0;
-  double _totalHours = 0;
-  String _recommendation = '';
-  List<int> _weeklyCounts = List.filled(7, 0);
-  List<int> _hourlyCounts = List.filled(24, 0);
+  // Raw data
   List<Detection> _recentDetections = [];
+  List<int> _hourlyCounts = List.filled(24, 0);
+  List<int> _weeklyCounts = List.filled(7, 0);
+  Map<String,int> _monthlyCounts = {};
+  Map<DateTime,int> _last30Days = {};
 
-  Map<String, int> _monthlyCounts = {};
-  Map<DateTime, int> _last30Days = {};
+  // Computed
+  int _peakHour = 0, _totalAlerts = 0;
+  double _avgHourlyAlerts = 0;
+  double _avgDailyAlerts = 0;
+  int _peakWeekDay = 0;
 
-  double _alertsDelta = 0;
-  double _hoursDelta = 0;
-
+  // Tabs state
+  bool _showComparison = false;
+  String _selectedFilter = 'All';
+  final _filters = ['All', 'Drowsy', 'No Seatbelt', 'Yawning'];
   DateTime _currentMonth = DateTime.now();
+  final _weekDays = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
   @override
   void initState() {
@@ -51,34 +58,44 @@ class _AnalyticsPageState extends State<AnalyticsPage>
 
   Future<void> _loadAll() async {
     try {
-      final rec = _svc.fetchRecentDetections(widget.driverId, limit: 5);
-      final weekly = _svc.fetchWeeklyTrends(widget.driverId);
-      final totals = _svc.fetchTotals(widget.driverId);
-      final hourly = _svc.fetchHourlyCounts(widget.driverId);
-      final heatmap = _svc.fetchLast30DaysCounts(widget.driverId);
+      final results = await Future.wait([
+        _svc.fetchRecentDetections(widget.driverId, limit: 10),
+        _svc.fetchHourlyCounts(widget.driverId),
+        _svc.fetchWeeklyTrends(widget.driverId),
+        _svc.fetchTotals(widget.driverId),
+      ]);
 
-      final results = await Future.wait([rec, weekly, totals, hourly, heatmap]);
-      if (!mounted) return;
+      final recList   = results[0] as List<Detection>;
+      final hours     = results[1] as List<int>;
+      final week      = results[2] as List<int>;
+      final totalsMap = results[3] as Map<String, dynamic>;
 
-      final totMap = results[2] as Map<String, dynamic>;
       setState(() {
-        _recentDetections = results[0] as List<Detection>;
-        _weeklyCounts = results[1] as List<int>;
+        _recentDetections = recList;
+        _hourlyCounts     = hours;
+        _weeklyCounts     = week;
 
-        _totalAlerts = (totMap['totalAlerts'] as int?) ?? 0;
-        _totalHours = (totMap['totalHours'] as num?)?.toDouble() ?? 0.0;
-        _recommendation = (totMap['recommendation'] as String?) ?? '';
-        _alertsDelta = (totMap['alertsDelta'] as num?)?.toDouble() ?? 0.0;
-        _hoursDelta = (totMap['hoursDelta'] as num?)?.toDouble() ?? 0.0;
+        _totalAlerts       = totalsMap['totalAlerts'] as int;
+        _avgHourlyAlerts   = hours.isNotEmpty
+            ? hours.reduce((a,b) => a+b) / hours.length
+            : 0.0;
+        _peakHour = hours.asMap()
+            .entries
+            .reduce((a,b) => b.value > a.value ? b : a)
+            .key;
 
-        _hourlyCounts = results[3] as List<int>;
-        _last30Days = results[4] as Map<DateTime, int>;
+        _avgDailyAlerts = week.isNotEmpty
+            ? week.reduce((a,b) => a+b) / week.length
+            : 0.0;
+        _peakWeekDay = week.asMap()
+            .entries
+            .reduce((a,b) => b.value > a.value ? b : a)
+            .key;
 
         _loading = false;
       });
     } catch (e) {
-      debugPrint('Error loading analytics: $e');
-      if (!mounted) return;
+      debugPrint('Analytics load error: $e');
       setState(() => _loading = false);
     }
   }
@@ -86,25 +103,22 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   Future<void> _loadForMonth(DateTime month) async {
     setState(() => _loadingMonth = true);
     try {
-      final m = await _svc.fetchMonthlyBreakdownForMonth(widget.driverId, month);
-      final h = await _svc.fetchDailyCountsForMonth(widget.driverId, month);
-      if (!mounted) return;
+      final pieData = await _svc.fetchMonthlyBreakdownForMonth(widget.driverId, month);
+      final heat   = await _svc.fetchDailyCountsForMonth(widget.driverId, month);
       setState(() {
-        _monthlyCounts = m;
-        _last30Days = h;
-        _loadingMonth = false;
+        _monthlyCounts = pieData;
+        _last30Days    = heat;
+        _loadingMonth  = false;
       });
     } catch (e) {
-      debugPrint('Error loading month data: $e');
-      if (!mounted) return;
+      debugPrint('Month load error: $e');
       setState(() => _loadingMonth = false);
     }
   }
 
   void _changeMonth(int offset) {
-    final next = DateTime(_currentMonth.year, _currentMonth.month + offset, 1);
-    setState(() => _currentMonth = next);
-    _loadForMonth(next);
+    _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + offset, 1);
+    _loadForMonth(_currentMonth);
   }
 
   @override
@@ -112,13 +126,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     if (_loading) {
       return Scaffold(
         backgroundColor: Colors.white,
-        body: Center(
-          child: Lottie.asset(
-            'assets/animations/loading_animation.json',
-            width: 180,
-            height: 180,
-          ),
-        ),
+        body: Center(child: Lottie.asset('assets/animations/loading_animation.json', width: 180)),
       );
     }
 
@@ -129,174 +137,196 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         appBar: AppBar(
           backgroundColor: Colors.blueAccent,
           centerTitle: true,
-          elevation: 0,
-          title: const Text(
-            'Analytics',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          bottom: const TabBar(
+          title: const Text('Analytics', style: TextStyle(fontWeight: FontWeight.bold,color: Colors.white)),
+          bottom: TabBar(
+            indicator: UnderlineTabIndicator(
+              borderSide: BorderSide(width: 3, color: Colors.white),
+              insets: EdgeInsets.symmetric(horizontal: 32),
+            ),
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
-            indicatorColor: Colors.white,
-            tabs: [Tab(text: 'Day'), Tab(text: 'Week'), Tab(text: 'Month')],
+            labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+            tabs: const [
+              Tab(text: 'Day'),
+              Tab(text: 'Week'),
+              Tab(text: 'Month'),
+            ],
           ),
+
         ),
         body: TabBarView(
-          children: [_buildDayView(), _buildWeekView(), _buildMonthView()],
+          children: [
+            _buildDayTab(),
+            _buildWeekTab(),
+            _buildMonthTab(),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildDayView() => _buildCommonBody(
-    title: 'Hourly Trend',
-    trendWidget: TrendSection(
-      counts: _hourlyCounts,
-      isSparkline: true,
-      showXAxis: true,
-    ),
-  );
+  Widget _buildDayTab() {
+    return DayAnalyticsView(
+      showComparison: _showComparison,
+      onComparisonChanged: (val) => setState(() => _showComparison = val),
+      avgHourly: _avgHourlyAlerts,
+      peakHour: _peakHour,
+      hourlyCounts: _hourlyCounts,
+      recentDetections: _recentDetections,
+      selectedFilter: _selectedFilter,
+      filters: _filters,
+      onFilterChanged: (f) => setState(() => _selectedFilter = f),
+    );
+  }
 
-  Widget _buildWeekView() => _buildCommonBody(
-    title: 'Weekly Trend',
-    trendWidget: TrendSection(counts: _weeklyCounts),
-  );
-
-  Widget _buildMonthView() => SafeArea(
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Monthly Breakdown',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-
-          MonthPicker(
-            month: DateFormat.yMMM().format(_currentMonth),
-            onPrev: () => _changeMonth(-1),
-            onNext: () => _changeMonth(1),
-          ),
-          const SizedBox(height: 16),
-
-          Card(
-            color: Colors.grey.shade50,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16)),
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: _loadingMonth
-                  ? SizedBox(
-                height: 250,
-                child: Center(
-                  child: Lottie.asset(
-                    'assets/animations/loading_animation.json',
-                    width: 80,
-                    height: 80,
-                  ),
-                ),
-              )
-                  : Column(
-                children: [
-                  PieBreakdown(
-                    data: _monthlyCounts,
-                    showLegend: true,
-                  ),
-                  const SizedBox(height: 24),
-                  buildManualHeatmap(
-                    data: _last30Days,
-                    month: _currentMonth,
-                    size: 20,
-                    baseColor: Colors.green,
+  Widget _buildWeekTab() {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Weekly Trend', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            // Use your existing metrics_section or gradient cards here…
+          Row(
+                          children: [
+                        Expanded(
+                          child: MetricCard(
+                            icon: Icons.show_chart,
+                                label: 'Avg / day',
+                                value: _avgDailyAlerts.toStringAsFixed(2),
+                            gradient: [Colors.green.shade400, Colors.green.shade200],
+                          ),
+                      ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: MetricCard(
+                      icon: Icons.calendar_today,
+                      label: 'Peak Day',
+                      value: _weekDays[_peakWeekDay],
+                      gradient: [Colors.orange.shade400, Colors.orange.shade200],
+                    ),
                   ),
                 ],
+              ),
+            const SizedBox(height: 20),
+            buildChartContainer(child: _buildLineChart(
+              spots: _weeklyCounts.asMap().entries
+                  .map((e) => FlSpot(e.key.toDouble(), e.value.toDouble()))
+                  .toList(),
+              color: Colors.green,
+              labels: _weekDays,
+            )),
+            const SizedBox(height: 24),
+            Text('Recent Issues', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            RecentDetectionsList(detections: _recentDetections),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonthTab() {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Monthly Breakdown', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            MonthPicker(
+              month: DateFormat.yMMM().format(_currentMonth),
+              onPrev: () => _changeMonth(-1),
+              onNext: () => _changeMonth(1),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              color: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: _loadingMonth
+                    ? SizedBox(height: 200, child: Center(child: Lottie.asset('assets/animations/loading_animation.json', width: 80)))
+                    : Column(
+                  children: [
+                    PieBreakdown(data: _monthlyCounts, showLegend: true),
+                    const SizedBox(height: 24),
+                    buildManualHeatmap(
+                      data: _last30Days,
+                      month: _currentMonth,
+                      size: 20,
+                      baseColor: Colors.blue,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+
+  // Helper for week chart
+  Widget buildChartContainer({required Widget child}) => Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
     ),
+    padding: const EdgeInsets.all(16),
+    child: child,
   );
 
-  Widget _buildCommonBody({required String title, required Widget trendWidget}) =>
-      SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Metrics',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              MetricsSection(
-                totalAlerts: _totalAlerts,
-                totalHours: _totalHours,
-                recommendation: _recommendation,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _kpiCard(
-                      'Alerts',
-                      _formatDelta(_alertsDelta),
-                      _alertsDelta >= 0 ? Icons.trending_up : Icons.trending_down,
-                      _alertsDelta >= 0 ? Colors.green : Colors.redAccent),
-                  _kpiCard(
-                      'Hours',
-                      _formatDelta(_hoursDelta),
-                      _hoursDelta >= 0 ? Icons.trending_up : Icons.trending_down,
-                      _hoursDelta >= 0 ? Colors.green : Colors.redAccent),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Text(title,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8)],
+  Widget _buildLineChart({
+    required List<FlSpot> spots,
+    required Color color,
+    required List<String> labels,
+  }) {
+    final maxY = spots.map((s) => s.y).fold(0.0, max) * 1.2;
+    return SizedBox(
+      height: 200,
+      child: LineChart(
+        LineChartData(
+          gridData: FlGridData(show: true, drawVerticalLine: false,
+            horizontalInterval: max(1, maxY/4),
+            getDrawingHorizontalLine: (_) => FlLine(color: Colors.grey[200]!, strokeWidth: 1),
+          ),
+          titlesData: FlTitlesData(
+            bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, interval: 1,
+              getTitlesWidget: (v,_) => Text(labels[v.toInt()], style: const TextStyle(fontSize: 10)),
+            )),
+            leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          ),
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isCurved: true,
+              color: color,
+              barWidth: 3,
+              dotData: FlDotData(show: true),
+              belowBarData: BarAreaData(
+                show: true,
+                gradient: LinearGradient(
+                  colors: [color.withOpacity(0.4), color.withOpacity(0.05)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                 ),
-                padding: const EdgeInsets.all(16),
-                child: trendWidget,
               ),
-              const SizedBox(height: 24),
-              const Text('Recent Issues',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              RecentDetectionsList(detections: _recentDetections),
-            ],
-          ),
+            ),
+          ],
+          minY: 0,
+          maxY: maxY,
+          borderData: FlBorderData(show: false),
         ),
-      );
-
-  Widget _kpiCard(String label, String delta, IconData icon, Color color) =>
-      Expanded(
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6)],
-          ),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(height: 4),
-              Text(delta,
-                  style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 2),
-              Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-            ],
-          ),
-        ),
-      );
-
-  String _formatDelta(double val) =>
-      val >= 0 ? '+${val.toStringAsFixed(1)}%' : '${val.toStringAsFixed(1)}%';
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      ),
+    );
+  }
 }
