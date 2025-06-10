@@ -22,16 +22,16 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Companies'),
-          centerTitle: true,
-        ),
+        appBar: AppBar(title: const Text('Companies')),
         body: const Center(child: Text('Please log in to view companies.')),
       );
     }
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .snapshots(),
       builder: (ctx, userSnap) {
         if (userSnap.hasError) {
           return const Scaffold(
@@ -44,8 +44,20 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
           );
         }
 
-        final userData = userSnap.data!.data() as Map<String, dynamic>? ?? {};
-        final String? currentCompany = userData['company'] as String?;
+        final u = userSnap.data!.data()! as Map<String, dynamic>;
+        final history = (u['companyHistory'] as List<dynamic>?)
+            ?.cast<String>() ??
+            [];
+        final assignsRaw = (u['assignments'] as List<dynamic>?) ?? [];
+        final assigns =
+        assignsRaw.cast<Map<String, dynamic>>();
+
+        // helper to know if user has an active stint here:
+        bool isMemberOf(String companyId) {
+          return assigns.any((a) =>
+          a['companyId'] == companyId &&
+              a['status']    == 'active');
+        }
 
         return Scaffold(
           backgroundColor: Colors.grey[50],
@@ -61,7 +73,8 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
+                    borderRadius:
+                    const BorderRadius.vertical(bottom: Radius.circular(32)),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.1),
@@ -70,20 +83,23 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
                       ),
                     ],
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                   child: Column(
                     children: [
                       Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.arrow_back, color: Colors.white),
+                            icon:
+                            const Icon(Icons.arrow_back, color: Colors.white),
                             onPressed: () => Navigator.of(context).pop(),
                           ),
                           const Spacer(),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      const Icon(Icons.business, size: 40, color: Colors.white70),
+                      const Icon(Icons.business,
+                          size: 40, color: Colors.white70),
                       const SizedBox(height: 8),
                       const Text(
                         'Our Partner Companies',
@@ -99,7 +115,8 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
 
                 // ─── SORT TOGGLE ───────────────────────────────────
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
                     children: [
                       const Text('Sort by:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
@@ -107,21 +124,13 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
                       ChoiceChip(
                         label: const Text('Highest ★'),
                         selected: _sortDescending,
-                        onSelected: (v) {
-                          setState(() {
-                            _sortDescending = true;
-                          });
-                        },
+                        onSelected: (_) => setState(() => _sortDescending = true),
                       ),
                       const SizedBox(width: 8),
                       ChoiceChip(
                         label: const Text('Lowest ★'),
                         selected: !_sortDescending,
-                        onSelected: (v) {
-                          setState(() {
-                            _sortDescending = false;
-                          });
-                        },
+                        onSelected: (_) => setState(() => _sortDescending = false),
                       ),
                     ],
                   ),
@@ -138,13 +147,14 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
                       if (snap.hasError) {
                         return const Center(child: Text('Error loading companies'));
                       }
-                      if (snap.connectionState == ConnectionState.waiting) {
+                      if (!snap.hasData) {
                         return const Center(child: CircularProgressIndicator());
                       }
 
                       final docs = snap.data!.docs;
                       return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -161,20 +171,25 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
                               child: ListView.separated(
                                 physics: const BouncingScrollPhysics(),
                                 itemCount: docs.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                                separatorBuilder: (_, __) =>
+                                const SizedBox(height: 12),
                                 itemBuilder: (context, index) {
                                   final doc = docs[index];
-                                  final data = doc.data()! as Map<String, dynamic>;
+                                  final data =
+                                  doc.data()! as Map<String, dynamic>;
                                   final companyId = doc.id;
-                                  final name = data['companyName'] as String? ?? 'Unnamed';
-                                  final drivers = List<String>.from(data['driverIds'] ?? []);
-                                  final driverCount = drivers.length;
-                                  final isMember = currentCompany == companyId;
-                                  final canJoin = currentCompany == null && !isMember;
+                                  final name =
+                                      data['companyName'] as String? ?? 'Unnamed';
+                                  final avgRating =
+                                      data['avgRating'] as num? ?? 0.0;
+                                  final driverIds =
+                                  List<String>.from(data['driverIds'] ?? []);
+                                  final isMember = isMemberOf(companyId);
 
                                   return TweenAnimationBuilder<double>(
                                     tween: Tween(begin: 0, end: 1),
-                                    duration: Duration(milliseconds: 300 + index * 100),
+                                    duration:
+                                    Duration(milliseconds: 300 + index * 100),
                                     builder: (_, v, child) => Opacity(
                                       opacity: v,
                                       child: Transform.translate(
@@ -185,33 +200,43 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
                                     child: Container(
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(
-                                          colors: [Colors.blue.shade50, Colors.blue.shade100],
+                                          colors: [
+                                            Colors.blue.shade50,
+                                            Colors.blue.shade100
+                                          ],
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
                                         ),
                                         borderRadius: BorderRadius.circular(20),
                                         boxShadow: const [
-                                          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4)),
+                                          BoxShadow(
+                                              color: Colors.black12,
+                                              blurRadius: 8,
+                                              offset: Offset(0, 4)),
                                         ],
                                       ),
                                       child: InkWell(
                                         borderRadius: BorderRadius.circular(20),
-                                        onTap: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(builder: (_) => CompanyDetailPage(companyId: companyId)),
-                                          );
-                                        },
+                                        onTap: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                CompanyDetailPage(companyId: companyId),
+                                          ),
+                                        ),
                                         child: Padding(
                                           padding: const EdgeInsets.all(16),
                                           child: Row(
                                             children: [
-                                              // ── AVATAR ─────────────
+                                              // Avatar
                                               CircleAvatar(
                                                 radius: 28,
-                                                backgroundColor: Colors.blueAccent.withOpacity(0.1),
+                                                backgroundColor: Colors.blueAccent
+                                                    .withOpacity(0.1),
                                                 child: Text(
-                                                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                                  name.isNotEmpty
+                                                      ? name[0].toUpperCase()
+                                                      : '?',
                                                   style: const TextStyle(
                                                     fontSize: 24,
                                                     fontWeight: FontWeight.bold,
@@ -221,65 +246,44 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
                                               ),
                                               const SizedBox(width: 20),
 
-                                              // ── INFO ────────────────
+                                              // Info
                                               Expanded(
                                                 child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
                                                       name,
                                                       style: const TextStyle(
                                                         fontSize: 18,
-                                                        fontWeight: FontWeight.w600,
+                                                        fontWeight:
+                                                        FontWeight.w600,
                                                       ),
                                                     ),
                                                     const SizedBox(height: 4),
                                                     Text(
-                                                      '$driverCount driver${driverCount == 1 ? "" : "s"}',
-                                                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                                                      '${driverIds.length} driver${driverIds.length == 1 ? "" : "s"}',
+                                                      style: const TextStyle(
+                                                          fontSize: 14,
+                                                          color: Colors.grey),
                                                     ),
                                                     const SizedBox(height: 8),
                                                     Row(
                                                       children: [
-                                                        StreamBuilder<QuerySnapshot>(
-                                                          stream: FirebaseFirestore.instance
-                                                              .collection('companies')
-                                                              .doc(companyId)
-                                                              .collection('ratings')
-                                                              .snapshots(),
-                                                          builder: (ctx, snap) {
-                                                            if (snap.hasError) {
-                                                              return const Text('Error loading reviews');
-                                                            }
-                                                            if (!snap.hasData) {
-                                                              return const SizedBox(
-                                                                width: 80,
-                                                                height: 16,
-                                                                child: LinearProgressIndicator(),
-                                                              );
-                                                            }
-
-                                                            final ratingDocs = snap.data!.docs;
-                                                            final count = ratingDocs.length;
-                                                            final totalStars = ratingDocs.fold<int>(
-                                                              0,
-                                                                  (sum, doc) => sum + ((doc.data()! as Map<String, dynamic>)['rating'] as int),
-                                                            );
-                                                            final avg = (count == 0) ? 0.0 : totalStars / count;
-
-                                                            return Row(
-                                                              children: [
-                                                                const Icon(Icons.star, size: 16, color: Colors.amber),
-                                                                const SizedBox(width: 4),
-                                                                Text(avg.toStringAsFixed(1)),
-                                                                const SizedBox(width: 12),
-                                                                Text(
-                                                                  '($count reviews)',
-                                                                  style: const TextStyle(fontSize: 12, color: Colors.black54),
-                                                                ),
-                                                              ],
-                                                            );
-                                                          },
+                                                        const Icon(
+                                                          Icons.star,
+                                                          size: 16,
+                                                          color: Colors.amber,
+                                                        ),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          avgRating
+                                                              .toStringAsFixed(1),
+                                                          style:
+                                                          const TextStyle(
+                                                            fontWeight:
+                                                            FontWeight.bold,
+                                                          ),
                                                         ),
                                                       ],
                                                     ),
@@ -287,178 +291,115 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
                                                 ),
                                               ),
 
-                                              // ── ACTION BUTTON ─────────────
-                                              if (canJoin)
+                                              // Action button
+                                              if (!isMember)
                                                 ElevatedButton(
                                                   style: ElevatedButton.styleFrom(
-                                                    backgroundColor: const Color(0xFF1976D2),
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(16),
+                                                    backgroundColor:
+                                                    const Color(0xFF1976D2),
+                                                    shape:
+                                                    RoundedRectangleBorder(
+                                                      borderRadius:
+                                                      BorderRadius.circular(
+                                                          16),
                                                     ),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                                    padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 20,
+                                                        vertical: 12),
                                                   ),
                                                   onPressed: () async {
-                                                    final ok = await RequestService().sendJoinRequest(companyId);
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(
-                                                        content: Row(
-                                                          children: const [
-                                                            Icon(Icons.check_circle, color: Colors.white),
-                                                            SizedBox(width: 8),
-                                                            Text(
-                                                              'Join request sent',
-                                                              style: TextStyle(color: Colors.white),
-                                                            ),
-                                                          ],
+                                                    final ok = await RequestService()
+                                                        .sendJoinRequest(
+                                                        companyId);
+                                                    ScaffoldMessenger.of(context)
+                                                      ..hideCurrentSnackBar()
+                                                      ..showSnackBar(
+                                                        SnackBar(
+                                                          content: Text(ok
+                                                              ? 'Join request sent'
+                                                              : 'Already requested'),
+                                                          behavior: SnackBarBehavior
+                                                              .floating,
                                                         ),
-                                                        backgroundColor: Colors.green.shade600,
-                                                        behavior: SnackBarBehavior.floating,
-                                                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                                        shape: const RoundedRectangleBorder(
-                                                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                                                        ),
-                                                        duration: const Duration(seconds: 2),
-                                                      ),
-                                                    );
+                                                      );
                                                   },
                                                   child: const Text(
                                                     'Join',
-                                                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 14,
+                                                      fontWeight:
+                                                      FontWeight.w600,
+                                                    ),
                                                   ),
                                                 )
-                                              else if (isMember)
+                                              else
                                                 Column(
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
-                                                    // ── (A) Rate / Edit Button ───────────────────
+                                                    // ─── (A) Rate / Edit ────────────────────────────────
                                                     FutureBuilder<int?>(
                                                       future: CompanyService().fetchUserRating(
                                                         companyId,
                                                         FirebaseAuth.instance.currentUser!.uid,
                                                       ),
-                                                      builder: (ctx, snap) {
-                                                        // 1) Loading: disabled button with spinner
-                                                        if (snap.connectionState == ConnectionState.waiting) {
-                                                          return SizedBox(
-                                                            width: 100,
-                                                            height: 36,
-                                                            child: ElevatedButton(
-                                                              onPressed: null,
-                                                              child: const SizedBox(
-                                                                width: 16,
-                                                                height: 16,
-                                                                child: CircularProgressIndicator(
-                                                                  strokeWidth: 2,
-                                                                  color: Colors.white,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          );
-                                                        }
-                                                        // 2) Error:
-                                                        if (snap.hasError) {
-                                                          return const Text('Error');
-                                                        }
-
-                                                        // 3) Data loaded:
-                                                        final existingStars = snap.data; // int? (null if not rated yet)
-                                                        final labelText = (existingStars == null) ? 'Rate' : 'Edit Rating';
-
+                                                      builder: (ctx, rs) {
+                                                        final existing = rs.data;               // null or 1–5
+                                                        final label    = (existing == null) ? 'Rate' : 'Edit';
                                                         return ElevatedButton.icon(
+                                                          icon: const Icon(Icons.star, size: 18, color: Colors.white),
+                                                          label: Text(label, style: const TextStyle(color: Colors.white)),
                                                           style: ElevatedButton.styleFrom(
-                                                            minimumSize: const Size(120,0),
                                                             backgroundColor: Colors.orange.shade700,
                                                             shape: RoundedRectangleBorder(
                                                               borderRadius: BorderRadius.circular(16),
                                                             ),
-                                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                                            foregroundColor: Colors.white,
                                                           ),
-                                                          label: Text(
-                                                            labelText,
-                                                            style: const TextStyle(
-                                                              color: Colors.white,
-                                                              fontSize: 14,
-                                                              fontWeight: FontWeight.w600,
-                                                            ),
-                                                          ),
-                                                          onPressed: () {
-                                                            // Open the rating dialog, passing existingStars
-                                                            _openRatingDialog(context, companyId, existingStars);
-                                                          },
+                                                          onPressed: () => _showRatingDialog(ctx, companyId, existing),
                                                         );
                                                       },
                                                     ),
 
-                                                    const SizedBox(width: 8),
+                                                    const SizedBox(height: 8),
 
-                                                    // ── (B) Leave Button ───────────────────────────
-                                                    ElevatedButton(
+                                                    // ─── (B) Leave Company ───────────────────────────────
+                                                    ElevatedButton.icon(
+                                                      icon: const Icon(Icons.exit_to_app, size: 18, color: Colors.white),
+                                                      label: const Text('Leave', style: TextStyle(color: Colors.white)),
                                                       style: ElevatedButton.styleFrom(
-                                                        minimumSize: const Size(120,0),
                                                         backgroundColor: Colors.red.shade600,
                                                         shape: RoundedRectangleBorder(
                                                           borderRadius: BorderRadius.circular(16),
                                                         ),
-                                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                                        foregroundColor: Colors.white,
                                                       ),
                                                       onPressed: () async {
-                                                        // 1) Confirm “Leave Company?”
-                                                        final confirm = await showDialog<bool>(
-                                                          context: context,
-                                                          builder: (ctx) => AlertDialog(
+                                                        final ok = await showDialog<bool>(
+                                                          context: ctx,
+                                                          builder: (d) => AlertDialog(
                                                             title: const Text('Leave Company?'),
-                                                            content: const Text('Are you sure you want to leave this company?'),
+                                                            content: const Text('Are you sure you want to leave?'),
                                                             actions: [
-                                                              TextButton(
-                                                                onPressed: () => Navigator.of(ctx).pop(false),
-                                                                child: const Text('Cancel'),
-                                                              ),
-                                                              TextButton(
-                                                                onPressed: () => Navigator.of(ctx).pop(true),
-                                                                child: const Text('Leave'),
-                                                              ),
+                                                              TextButton(onPressed: ()=>Navigator.pop(d,false), child: const Text('Cancel')),
+                                                              TextButton(onPressed: ()=>Navigator.pop(d,true),  child: const Text('Leave')),
                                                             ],
                                                           ),
                                                         );
-                                                        if (confirm == true) {
-                                                          try {
-                                                            // 2) Call the service to leave
-                                                            await CompanyService().leaveCompany(
-                                                              companyId,
-                                                              FirebaseAuth.instance.currentUser!.uid,
-                                                            );
-                                                            ScaffoldMessenger.of(context).showSnackBar(
-                                                              const SnackBar(content: Text('You have left the company.')),
-                                                            );
-                                                          } catch (e) {
-                                                            ScaffoldMessenger.of(context).showSnackBar(
-                                                              SnackBar(content: Text('Error leaving company: $e')),
-                                                            );
-                                                          }
+                                                        if (ok == true) {
+                                                          await CompanyService().leaveCompany(
+                                                            companyId,
+                                                            FirebaseAuth.instance.currentUser!.uid,
+                                                          );
+                                                          ScaffoldMessenger.of(ctx).showSnackBar(
+                                                            const SnackBar(content: Text('You have left the company')),
+                                                          );
                                                         }
                                                       },
-                                                      child: const Text(
-                                                        'Leave',
-                                                        style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-                                                      ),
                                                     ),
                                                   ],
                                                 )
-                                              else
-                                                ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: Colors.grey,
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(16),
-                                                    ),
-                                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                                  ),
-                                                  onPressed: null,
-                                                  child: const Text(
-                                                    'Member',
-                                                    style: TextStyle(color: Colors.white, fontSize: 14),
-                                                  ),
-                                                ),
                                             ],
                                           ),
                                         ),
@@ -481,127 +422,89 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
       },
     );
   }
-
-  void _openRatingDialog(
-      BuildContext context,
-      String companyId,
-      int? existingStars,
-      ) {
-    int _selected = existingStars ?? 0;
-    bool _isSubmitting = false;
+  void _showRatingDialog(BuildContext context, String companyId, int? existingStars) {
+    int selected = existingStars ?? 0;
+    bool submitting = false;
 
     showDialog(
       context: context,
-      builder: (dialogCtx) {
-        return StatefulBuilder(
-          builder: (ctx, setState) {
-            return AlertDialog(
-              title: Text(
-                existingStars == null ? 'Rate this company' : 'Edit your rating',
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Star picker:
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (i) {
-                      return IconButton(
-                        icon: Icon(
-                          i < _selected ? Icons.star : Icons.star_border,
-                          color: Colors.amber,
-                          size: 32,
-                        ),
-                        onPressed: _isSubmitting
-                            ? null
-                            : () {
-                          setState(() {
-                            _selected = i + 1;
-                          });
-                        },
-                      );
-                    }),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          return AlertDialog(
+            title: Text(existingStars == null ? 'Rate Company' : 'Edit Rating'),
+            content: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (i) {
+                return IconButton(
+                  icon: Icon(
+                    i < selected ? Icons.star : Icons.star_border,
+                    color: Colors.amber,
                   ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: _isSubmitting ? null : () => Navigator.of(ctx).pop(),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: (_selected == 0 || _isSubmitting)
+                  onPressed: submitting
                       ? null
-                      : () async {
-                    setState(() {
-                      _isSubmitting = true;
-                    });
-                    try {
-                      await CompanyService().rateCompany(
-                        companyId,
-                        FirebaseAuth.instance.currentUser!.uid,
-                        _selected,
-                      );
-                      Navigator.of(ctx).pop();
-                      ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(
-                          SnackBar(
-                            behavior: SnackBarBehavior.floating,
-                            margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            backgroundColor: Colors.green.shade600,
-                            content: Row(
-                              children: [
-                                const Icon(Icons.check_circle, color: Colors.white),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    existingStars == null
-                                        ? 'You rated $_selected ★'
-                                        : 'Rating updated to $_selected ★',
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                    } catch (e) {
-                      Navigator.of(ctx).pop();
-                      ScaffoldMessenger.of(context)
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Failed to submit rating: $e',
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                            backgroundColor: Colors.red.shade600,
-                          ),
-                        );
-                    } finally {
-                      setState(() {
-                        _isSubmitting = false;
-                      });
-                    }
-                  },
-                  child: _isSubmitting
-                      ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                      : Text(existingStars == null ? 'Submit' : 'Update'),
+                      : () => setState(() {
+                    selected = i + 1;
+                  }),
+                );
+              }),
+            ),
+            actions: [
+              TextButton(
+                onPressed: submitting ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: (selected == 0 || submitting)
+                    ? null
+                    : () async {
+                  setState(() => submitting = true);
+                  try {
+                    await CompanyService().rateCompany(
+                      companyId,
+                      FirebaseAuth.instance.currentUser!.uid,
+                      selected,
+                    );
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          existingStars == null
+                              ? 'You rated $selected ★'
+                              : 'Rating updated to $selected ★',
+                        ),
+                        backgroundColor: Colors.green.shade600,
+                      ),
+                    );
+                  } catch (e) {
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to submit rating: $e'),
+                        backgroundColor: Colors.red.shade600,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade700,
+                  foregroundColor: Colors.white,
                 ),
-              ],
-            );
-          },
-        );
-      },
+                child: submitting
+                    ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+                    : const Text('Submit'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
+
 }

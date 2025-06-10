@@ -1,7 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
@@ -15,7 +14,6 @@ class AuthService {
   }
 
   Future<UserCredential> signInWithGoogle() async {
-    // Trigger the authentication flow
     final googleUser = await _googleSignIn.signIn();
     if (googleUser == null) {
       throw FirebaseAuthException(
@@ -23,17 +21,19 @@ class AuthService {
         message: 'Sign in aborted by user',
       );
     }
-
-    // Obtain the auth details from the request
     final googleAuth = await googleUser.authentication;
-
-    // Create a new credential
     final credential = GoogleAuthProvider.credential(
       accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
+      idToken:   googleAuth.idToken,
     );
-
-    // Once signed in, return the UserCredential
     return _auth.signInWithCredential(credential);
+  }
+
+  /// Signs out from both Firebase Auth and Google Sign-In.
+  Future<void> signOut() async {
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
+    await _auth.signOut();
   }
 }

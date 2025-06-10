@@ -41,7 +41,7 @@ Future<void> seatbeltIsolateEntry(List<dynamic> args) async {
         final List<double> hArr    = outputBuffer[0][3];
         final List<double> confArr = outputBuffer[0][4];
 
-        const double confThreshold = 0.4;
+        const double confThreshold = 0.38;
         final List<Map<String, double>> boxes = [];
         final double maxConf = confArr.reduce((a, b) => a > b ? a : b);
         print("🔍 Highest confidence in frame: ${maxConf.toStringAsFixed(3)}");

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/face_enrollment_service.dart';
 import '../components/face_enrollment_screen_components/camera_preview_widget.dart';
+import 'login_screen.dart';
 
 class FaceEnrollmentPage extends StatefulWidget {
   final String email;
@@ -48,12 +49,22 @@ class _FaceEnrollmentPageState extends State<FaceEnrollmentPage> {
     if (emb != null) {
       // Try to save/embed; keep showing the loader until callback completes or throws
       try {
+        // 1) Run the callback (does all the Firestore writes)
         await widget.onEnrollmentComplete(
           emb,
           widget.email,
           widget.password,
           widget.displayName,
         );
+
+// 2) Now navigate *from FaceEnrollmentPage* to the login screen,
+//    removing all previous routes (including FaceEnrollmentPage).
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+              (route) => false,
+        );
+
         // Success path: presumably you navigate away in onEnrollmentComplete,
         // so we deliberately do NOT call setState(false) here.
       } catch (err) {

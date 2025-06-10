@@ -1,7 +1,10 @@
 // lib/services/company_service.dart
 
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 import '../models/company_rating.dart';
 
@@ -28,9 +31,9 @@ class CompanyService {
       'companyName': companyName,
       'email': email,
       'createdAt': Timestamp.now(),
-      'driverIds': <String>[],        // ← NEW: start with no drivers
-      'avgRating': 0.0,               // ← NEW: initial average rating
-      'adminId': uid,                 // ← NEW: creator is admin
+      'driverIds': <String>[], // ← NEW: start with no drivers
+      'avgRating': 0.0, // ← NEW: initial average rating
+      'adminId': uid, // ← NEW: creator is admin
     });
   }
 
@@ -46,16 +49,51 @@ class CompanyService {
     final compRef = _firestore.collection('companies').doc(companyId);
     final userRef = _firestore.collection('users').doc(driverId);
 
-    // 1) Add to the array of driver IDs
+    final now = Timestamp.now();
+
+    // 1) Add to the company’s driverIds as before
     await compRef.update({
       'driverIds': FieldValue.arrayUnion([driverId]),
     });
 
-    // 2) Update the user's own document to point to this company
-    await userRef.update({
-      'company': companyId,
+    // 2) In a transaction, upsert the assignment entry
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(userRef);
+      final data = snap.data() as Map<String, dynamic>;
+      final raw = (data['assignments'] as List<dynamic>?) ?? [];
+      final assigns = raw.cast<Map<String, dynamic>>();
+
+      var updated = false;
+      for (var entry in assigns) {
+        if (entry['companyId'] == companyId) {
+          // overwrite the existing stint
+          entry['dateHired'] = now;
+          entry['dateLeft'] = null;
+          entry['status'] = 'active';
+          updated = true;
+          break;
+        }
+      }
+      if (!updated) {
+        // first time hire → add new stint
+        assigns.add({
+          'companyId': companyId,
+          'dateHired': now,
+          'dateLeft': null,
+          'status': 'active',
+        });
+      }
+
+      // 3) Write back both arrays + openToWork
+      tx.update(userRef, {
+        'companyHistory': FieldValue.arrayUnion([companyId]),
+        // still use arrayUnion
+        'assignments': assigns,
+        'openToWork': false,
+      });
     });
   }
+
 
   /// ─── C) GET ALL DRIVER IDs ──────────────────────────────────────────
   Future<List<String>> getCompanyDriverIds(String companyId) async {
@@ -67,7 +105,8 @@ class CompanyService {
   /// ─── D) GET AVERAGE RATING FOR A DRIVER (UNCHANGED) ─────────────────
   Future<double> getAverageRating(String driverId) async {
     final snap =
-    await _firestore.collection('ratings').where('driverId', isEqualTo: driverId).get();
+    await _firestore.collection('ratings').where(
+        'driverId', isEqualTo: driverId).get();
     if (snap.docs.isEmpty) return 0.0;
     final total = snap.docs.fold<double>(
       0,
@@ -80,15 +119,27 @@ class CompanyService {
   Future<void> hireDriver(String companyId, String driverId) async {
     final compRef = _firestore.collection('companies').doc(companyId);
     final userRef = _firestore.collection('users').doc(driverId);
+    final now = Timestamp.now();
 
-    // 1) add driverId to the company
     await compRef.update({
       'driverIds': FieldValue.arrayUnion([driverId]),
     });
 
-    // 2) assign the company on the user
-    await userRef.update({'company': companyId});
+    await userRef.update({
+      'company': companyId, // optional if you need it
+      'openToWork': false,
+      'companyHistory': FieldValue.arrayUnion([companyId]),
+      'assignments': FieldValue.arrayUnion([
+        {
+          'companyId': companyId,
+          'dateHired': now,
+          'dateLeft': null,
+          'status': 'active',
+        }
+      ]),
+    });
   }
+
 
   /// ─── F) SUBMIT A NEW RATING (UNCHANGED) ─────────────────────────────
   Future<bool> submitCompanyRating(String companyId, double rating) async {
@@ -104,7 +155,8 @@ class CompanyService {
     }
 
     // 2) Write into companies/{companyId}/ratings/{uid}
-    await _firestore.collection('companies').doc(companyId).collection('ratings').doc(uid).set({
+    await _firestore.collection('companies').doc(companyId).collection(
+        'ratings').doc(uid).set({
       'rating': rating,
       'timestamp': FieldValue.serverTimestamp(),
     });
@@ -115,7 +167,8 @@ class CompanyService {
   /// ─── G) GET AVERAGE RATING FOR A COMPANY (UNCHANGED) ─────────────────
   Future<double> getAverageCompanyRating(String companyId) async {
     final snap =
-    await _firestore.collection('companies').doc(companyId).collection('ratings').get();
+    await _firestore.collection('companies').doc(companyId).collection(
+        'ratings').get();
     if (snap.docs.isEmpty) return 0.0;
     final sum = snap.docs
         .map((d) => (d.data()['rating'] as num).toDouble())
@@ -124,8 +177,7 @@ class CompanyService {
   }
 
   /// ─── H) RATE COMPANY (UNCHANGED) ────────────────────────────────────
-  Future<void> rateCompany(
-      String companyId,
+  Future<void> rateCompany(String companyId,
       String userId,
       int stars, [
         String? comment,
@@ -177,7 +229,8 @@ class CompanyService {
   }
 
   /// ─── K) FETCH RECENT REVIEWS (UNCHANGED) ─────────────────────────────
-  Future<List<CompanyRating>> fetchRecentRatings(String companyId, {int limit = 5}) async {
+  Future<List<CompanyRating>> fetchRecentRatings(String companyId,
+      {int limit = 5}) async {
     final snap = await _firestore
         .collection('company_ratings')
         .where('companyId', isEqualTo: companyId)
@@ -216,7 +269,9 @@ class CompanyService {
     );
     final avg = (count == 0) ? 0.0 : totalStars / count;
 
-    await FirebaseFirestore.instance.collection('companies').doc(companyId).update({'avgRating': avg});
+    await FirebaseFirestore.instance.collection('companies')
+        .doc(companyId)
+        .update({'avgRating': avg});
   }
 
   /// ─── N) LEAVE COMPANY (NEW) ─────────────────────────────────────────
@@ -225,17 +280,30 @@ class CompanyService {
   /// 1) remove themselves from company’s `driverIds`
   /// 2) set their own `/users/{userId}.company = null`
   Future<void> leaveCompany(String companyId, String userId) async {
+    final compRef = _firestore.collection('companies').doc(companyId);
     final userRef = _firestore.collection('users').doc(userId);
-    final companyRef = _firestore.collection('companies').doc(companyId);
+    final now = Timestamp.now();
 
-    // 1) Remove userId from driverIds array
-    await companyRef.update({
+    // 1) Remove from current employees
+    await compRef.update({
       'driverIds': FieldValue.arrayRemove([userId]),
     });
 
-    // 2) Set user's "company" field to null
-    await userRef.update({
-      'company': null,
+    // 2) Update that user's assignment record & openToWork
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(userRef);
+      final assigns = List<Map>.from(snap['assignments'] as List);
+      for (var a in assigns) {
+        if (a['companyId'] == companyId && a['status'] == 'active') {
+          a['status'] = 'inactive';
+          a['dateLeft'] = now;
+          break;
+        }
+      }
+      tx.update(userRef, {
+        'assignments': assigns,
+        'openToWork': true,
+      });
     });
   }
 
@@ -245,28 +313,66 @@ class CompanyService {
   /// 1) Verify requestor is admin
   /// 2) remove employeeId from company’s `driverIds`
   /// 3) set `/users/{employeeId}.company = null`
-  Future<void> fireEmployee(String companyId, String adminId, String employeeId) async {
+  Future<void> fireEmployee(String companyId, String adminId,
+      String employeeId) async {
     final companyRef = _firestore.collection('companies').doc(companyId);
-
-    // 1) Ensure caller is the admin for this company
-    final companySnapshot = await companyRef.get();
-    final data = companySnapshot.data() as Map<String, dynamic>? ?? {};
-    final storedAdminId = data['adminId'] as String?;
-    if (storedAdminId == null || storedAdminId != adminId) {
-      throw Exception("Only the company admin can fire employees.");
-    }
-    if (employeeId == adminId) {
-      throw Exception("Admin cannot fire themselves.");
+    final companySnap = await companyRef.get();
+    if (companySnap['adminId'] != adminId) {
+      throw Exception("Only the admin can fire employees.");
     }
 
-    // 2) Remove that employee’s UID from driverIds
+    // 1) Remove from current employees
     await companyRef.update({
       'driverIds': FieldValue.arrayRemove([employeeId]),
     });
 
-    // 3) Set that user’s company field to null
-    await _firestore.collection('users').doc(employeeId).update({
-      'company': null,
+    // 2) Mark their assignment as 'fired'
+    final userRef = _firestore.collection('users').doc(employeeId);
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(userRef);
+      final assigns = List<Map>.from(snap['assignments'] as List);
+      for (var a in assigns) {
+        if (a['companyId'] == companyId && a['status'] == 'active') {
+          a['status'] = 'fired';
+          a['dateLeft'] = Timestamp.now();
+          break;
+        }
+      }
+      tx.update(userRef, {
+        'assignments': assigns,
+        'openToWork': true,
+      });
     });
   }
+
+  Future<void> updateCompany(String companyId, {
+    String? name,
+    String? description,
+    String? logoUrl,
+  }) async {
+    final Map<String, dynamic> updates = {};
+    if (name != null) updates['name'] = name;
+    if (description != null) updates['description'] = description;
+    if (logoUrl != null) updates['logoUrl'] = logoUrl;
+
+    if (updates.isNotEmpty) {
+      await _firestore
+          .collection('companies')
+          .doc(companyId)
+          .update(updates);
+    }
+  }
+    Future<String> uploadCompanyLogo(String companyId, File imageFile) async {
+      // 1) Create a storage ref under "company_logos/{companyId}.png"
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('company_logos')
+          .child('$companyId.png');
+
+      // 2) Upload the file
+      await ref.putFile(imageFile);
+
+      // 3) Get its URL
+      return await ref.getDownloadURL();
+    }
 }

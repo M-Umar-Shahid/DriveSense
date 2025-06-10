@@ -1,60 +1,113 @@
+// lib/screens/driver_detail_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:lottie/lottie.dart';
-import 'company_driver_detail_screen.dart';
+
+import '../models/dashboard_stats.dart';
+import '../services/company_service.dart';
+import '../services/dashboard_sevice.dart';   // for rating
 
 class DriverDetailPage extends StatelessWidget {
   final String driverId;
-  const DriverDetailPage({Key? key, required this.driverId}) : super(key: key);
+  const DriverDetailPage({super.key, required this.driverId});
 
   @override
   Widget build(BuildContext context) {
+    final dashSvc   = DashboardService();
+    final companySvc = CompanyService();
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
         slivers: [
-          // ─── Stretchy Gradient Header ───────────────────────
+          // ─── Curved Header + Avatar ───────────────────────────────
           SliverAppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.camera_alt, color: Colors.white),
+                onPressed: () { /* your camera action */ },
+              ),
+            ],
             backgroundColor: Colors.transparent,
-            expandedHeight: 200,
+            expandedHeight: 260,
             pinned: true,
-            stretch: true,
             elevation: 0,
+            title: const Text(
+              'Driver Overview',
+              style: TextStyle(color: Colors.white),
+            ),
+            centerTitle: true,
             flexibleSpace: FlexibleSpaceBar(
-              stretchModes: const [StretchMode.zoomBackground, StretchMode.fadeTitle],
-              title: const Text('Driver Overview'),
-              centerTitle: true,
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              collapseMode: CollapseMode.pin,
+              background: ClipPath(
+                clipper: _AppBarWaveClipper(),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    )],
                   ),
-                ),
-                child: SafeArea(
-                  bottom: false,
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: CircleAvatar(
-                      radius: 48,
-                      backgroundColor: Colors.white,
-                      child: StreamBuilder<DocumentSnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('drivers')
-                            .doc(driverId)
-                            .snapshots(),
-                        builder: (_, snap) {
-                          if (!snap.hasData) return const CircularProgressIndicator();
-                          final d = snap.data!.data() as Map<String, dynamic>;
-                          final name = d['name'] as String? ?? 'Unnamed';
-                          return Text(
-                            name.isNotEmpty ? name[0].toUpperCase() : '?',
-                            style: const TextStyle(fontSize: 32, color: Color(0xFF1976D2), fontWeight: FontWeight.bold),
-                          );
-                        },
-                      ),
+                  child: SafeArea(
+                    bottom: false,
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 48), // leave room for status bar
+                        StreamBuilder<DocumentSnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('users').doc(driverId).snapshots(),
+                          builder: (_, snap) {
+                            if (!snap.hasData) {
+                              return const CircleAvatar(
+                                radius: 48,
+                                backgroundColor: Colors.white24,
+                                child: CircularProgressIndicator(color: Colors.white),
+                              );
+                            }
+                            final data = snap.data!.data()! as Map<String, dynamic>;
+                            final name = data['displayName'] as String? ?? '';
+                            return CircleAvatar(
+                              radius: 48,
+                              backgroundColor: Colors.white,
+                              child: Text(
+                                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                style: const TextStyle(
+                                  fontSize: 32,
+                                  color: Color(0xFF1976D2),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        StreamBuilder<DocumentSnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('users').doc(driverId).snapshots(),
+                          builder: (_, snap) {
+                            final data = snap.data?.data() as Map<String, dynamic>?;
+                            final name = data?['displayName'] as String? ?? '';
+                            return Text(
+                              name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -62,128 +115,154 @@ class DriverDetailPage extends StatelessWidget {
             ),
           ),
 
-          // ─── Details & Stats ────────────────────────────────
+          // ─── Stats Grid ────────────────────────────────────────────
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-              child: StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance.collection('drivers').doc(driverId).snapshots(),
-                builder: (ctx, snap) {
-                  if (snap.hasError) {
-                    return Center(child: Text('Error: ${snap.error}'));
-                  }
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return Center(
-                      child: Lottie.asset('assets/animations/loading_animation.json', width: 150, height: 150),
-                    );
-                  }
+            child: FutureBuilder<DashboardStats>(
+              future: dashSvc.fetchStatsForUser(driverId),
+              builder: (context, snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (snap.hasError) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: Text('Error: ${snap.error}')),
+                  );
+                }
 
-                  final d = snap.data!.data() as Map<String, dynamic>? ?? {};
-                  final name     = d['name']     as String?  ?? 'Unnamed';
-                  final focusPct = (d['focus']   as num?)?.toDouble() ?? 0.0;
-                  final stars    = ((focusPct / 20).ceil()).clamp(1, 5);
+                final stats = snap.data!;  // ← Now you have a `stats` variable to use
 
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                  child: GridView(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 1.3,
+                    ),
                     children: [
-                      // Name
-                      Center(
-                        child: Text(
-                          name,
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
+                      _ColorStatCard(
+                        icon: Icons.directions_car,
+                        label: 'Trips',
+                        value: stats.tripCount.toString(),
+                        color: Colors.teal,
                       ),
-                      const SizedBox(height: 24),
-
-                      // Stats Grid
-                      TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0, end: 1),
-                        duration: const Duration(milliseconds: 500),
-                        builder: (context, v, child) => Opacity(
-                          opacity: v,
-                          child: Transform.translate(offset: Offset(0, 30 * (1 - v)), child: child),
-                        ),
-                        child: Card(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          elevation: 4,
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: GridView.count(
-                              crossAxisCount: 2,
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              mainAxisSpacing: 16,
-                              crossAxisSpacing: 16,
-                              children: [
-                                _StatTile(icon: Icons.directions_car, label: 'Trips', futureQuery: FirebaseFirestore.instance.collection('trips').where('driverId', isEqualTo: driverId).get()),
-                                _StatTile(icon: Icons.notifications, label: 'Alerts', futureQuery: FirebaseFirestore.instance.collection('alerts').where('driverId', isEqualTo: driverId).get()),
-                                _ValueTile(icon: Icons.track_changes, label: 'Focus', value: '${focusPct.toStringAsFixed(0)}%'),
-                                _CustomTile(icon: Icons.star, label: 'Rating', child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: List.generate(5, (j) => Icon(j < stars ? Icons.star : Icons.star_border, color: Colors.amber, size: 20)),
-                                )),
-                              ],
-                            ),
-                          ),
-                        ),
+                      _ColorStatCard(
+                        icon: Icons.warning_amber,
+                        label: 'Alerts',
+                        value: stats.alertCount.toString(),
+                        color: Colors.redAccent,
+                      ),
+                      _ColorStatCard(
+                        icon: Icons.remove_red_eye,
+                        label: 'Focus',
+                        value: '${stats.focusPercentage.toStringAsFixed(0)}%',
+                        color: Colors.blue,
+                      ),
+                      FutureBuilder<double>(
+                        future: companySvc.getAverageRating(driverId),
+                        builder: (ctx, r) {
+                          final rating = r.data ?? 0.0;
+                          return _ColorStatCard(
+                            icon: Icons.star,
+                            label: 'Rating',
+                            value: rating.toStringAsFixed(1),
+                            color: Colors.amber,
+                          );
+                        },
                       ),
                     ],
-                  );
-                },
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // ─── Employment Timeline ───────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Employment History',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                  SizedBox(height: 8),
+                  StreamBuilder<DocumentSnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('users').doc(driverId).snapshots(),
+                    builder: (_, snap) {
+                      if (!snap.hasData) return SizedBox();
+                      final assigns = (snap.data!.data()! as Map)['assignments'] as List;
+                      return Column(
+                        children: assigns.map((a) {
+                          final hired = (a['dateHired'] as Timestamp).toDate();
+                          final left = a['dateLeft'] != null
+                              ? (a['dateLeft'] as Timestamp).toDate()
+                              : null;
+                          final active = a['status'] == 'active';
+                          return _TimelineTile(
+                            title: active ? 'Active' : 'Fired',
+                            dateRange:
+                            '${hired.toLocal().toIso8601String().split("T").first}'
+                                ' → '
+                                '${left!=null?left.toLocal().toIso8601String().split("T").first:"Present"}',
+                            color: active? Colors.green : Colors.red,
+                          );
+                        }).toList(),
+                      );
+                    },
+                  ),
+                  SizedBox(height: 24),
+                ],
               ),
             ),
           ),
 
-          // ─── Recent Trips ─────────────────────────────────────
+          // ─── Recent Alerts Carousel ─────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: const Text('Recent Trips', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+              padding: EdgeInsets.only(left: 16),
+              child: Text('Recent Alerts',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
             ),
           ),
-          SliverToBoxAdapter(child: const SizedBox(height: 8)),
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-                  (ctx, index) {
-                return FutureBuilder<QuerySnapshot>(
-                  future: FirebaseFirestore.instance
-                      .collection('trips')
-                      .where('driverId', isEqualTo: driverId)
-                      .orderBy('timestamp', descending: true)
-                      .limit(5)
-                      .get(),
-                  builder: (ctx, tripSnap) {
-                    if (!tripSnap.hasData) return const Center(child: CircularProgressIndicator());
-                    final trips = tripSnap.data!.docs;
-                    if (trips.isEmpty) return const Center(child: Text('No recent trips.'));
-                    return Column(
-                      children: trips.map((doc) {
-                        final t = doc.data()! as Map<String, dynamic>;
-                        final when = (t['timestamp'] as Timestamp).toDate();
-                        return TweenAnimationBuilder<double>(
-                          tween: Tween(begin: 0, end: 1),
-                          duration: Duration(milliseconds: 300 + index * 100),
-                          builder: (context, v, child) => Opacity(
-                            opacity: v,
-                            child: Transform.translate(offset: Offset(0, 30 * (1 - v)), child: child),
-                          ),
-                          child: Card(
-                            margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            elevation: 2,
-                            child: ListTile(
-                              leading: const Icon(Icons.history, color: Colors.blueAccent),
-                              title: Text('${when.month}/${when.day}/${when.year}'),
-                              subtitle: Text('Distance: ${t['distance'] ?? '–'} km'),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    );
-                  },
-                );
-              },
-              childCount: 1,
+          SliverToBoxAdapter(child: SizedBox(height: 8)),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 140,
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('detections')
+                    .where('uid', isEqualTo: driverId)
+                    .orderBy('timestamp', descending: true)
+                    .limit(5)
+                    .snapshots(),
+                builder: (_, s) {
+                  if (!s.hasData) return Center(child: CircularProgressIndicator());
+                  return ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: s.data!.docs.length,
+                    separatorBuilder: (_,__) => SizedBox(width: 12),
+                    itemBuilder: (_, i) {
+                      final doc = s.data!.docs[i].data() as Map;
+                      final ts = (doc['timestamp'] as Timestamp).toDate();
+                      return _AlertCard(
+                        type: doc['alertType'] ?? 'Alert',
+                        time: '${ts.hour.toString().padLeft(2,'0')}:'
+                            '${ts.minute.toString().padLeft(2,'0')}',
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ),
         ],
@@ -192,69 +271,141 @@ class DriverDetailPage extends StatelessWidget {
   }
 }
 
-class _StatTile extends StatelessWidget {
+class _ColorStatCard extends StatelessWidget {
   final IconData icon;
-  final String label;
-  final Future<QuerySnapshot> futureQuery;
-
-  const _StatTile({required this.icon, required this.label, required this.futureQuery});
-
+  final String label, value;
+  final Color color;
+  const _ColorStatCard({
+    required this.icon, required this.label,
+    required this.value, required this.color,
+  });
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<QuerySnapshot>(
-      future: futureQuery,
-      builder: (_, snap) {
-        final count = snap.hasData ? snap.data!.docs.length : null;
-        return _ValueTile(
-          icon: icon,
-          label: label,
-          value: count != null ? count.toString() : '–',
-        );
-      },
+  Widget build(BuildContext c) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6)],
+      ),
+      child: Row(
+        children: [
+          Container(width: 6, height: double.infinity, color: color),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(icon, size: 28, color: color),
+                  SizedBox(height: 8),
+                  Text(value,
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(label, style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+/// A simple timeline entry with a colored circle and left border
+class _TimelineTile extends StatelessWidget {
+  final String title, dateRange;
+  final Color color;
+  const _TimelineTile({
+    required this.title, required this.dateRange, required this.color,
+  });
+  @override
+  Widget build(BuildContext c) {
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Column(
+            children: [
+              Container(width: 12, height: 12, decoration: BoxDecoration(
+                  color: color, shape: BoxShape.circle)),
+              Container(width: 2, height: 60, color: Colors.grey[300]),
+            ],
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  SizedBox(height: 4),
+                  Text(dateRange, style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _ValueTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-
-  const _ValueTile({required this.icon, required this.label, required this.value});
-
+/// A compact alert card you can tap later
+class _AlertCard extends StatelessWidget {
+  final String type, time;
+  const _AlertCard({required this.type, required this.time});
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(icon, size: 32, color: Theme.of(context).primaryColor),
-        const SizedBox(height: 8),
-        Text(label, style: const TextStyle(color: Colors.grey)),
-        const SizedBox(height: 8),
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-      ],
+  Widget build(BuildContext c) {
+    return Container(
+      width: 140,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6)],
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.notification_important,
+                color: Colors.orange, size: 28),
+            Spacer(),
+            Text(type,
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(height: 4),
+            Text(time, style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      ),
     );
   }
 }
 
-class _CustomTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Widget child;
-
-  const _CustomTile({required this.icon, required this.label, required this.child});
+/// Clips the bottom of the appbar into a smooth wave
+class _AppBarWaveClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final path = Path();
+    // start at top-left
+    path.lineTo(0, size.height - 40);
+    // make a quadratic Bézier curve to bottom center, then to bottom-right
+    path.quadraticBezierTo(
+      size.width * 0.5, size.height,
+      size.width, size.height - 40,
+    );
+    // line to top-right, then close
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
+  }
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(icon, size: 32, color: Theme.of(context).primaryColor),
-        const SizedBox(height: 8),
-        Text(label, style: const TextStyle(color: Colors.grey)),
-        const SizedBox(height: 8),
-        child,
-      ],
-    );
-  }
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }

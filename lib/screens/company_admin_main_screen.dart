@@ -37,12 +37,15 @@ class _CompanyAdminMainScreenState extends State<CompanyAdminMainScreen> {
       appBar: _currentIndex == 1
           ? AppBar(
         title: const Text('Available Drivers'),
-        backgroundColor: const Color(0xFF1976D2),
+        backgroundColor: Colors.white,
         elevation: 0,
       )
           : null,
 
-      body: pages[_currentIndex],
+          body: Container(
+            color: Colors.white,
+            child: pages[_currentIndex],
+          ),
 
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF1976D2),

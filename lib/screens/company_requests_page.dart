@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../services/company_service.dart';
 import '../services/request_service.dart';
 
 class CompanyRequestsPage extends StatelessWidget {
@@ -155,9 +156,19 @@ class CompanyRequestsPage extends StatelessWidget {
                                         minimumSize: const Size(80, 36),
                                       ),
                                       onPressed: () async {
+                                        // 1️⃣ mark the request accepted
                                         await RequestService().respondToRequest(doc.id, true);
+
+                                        // 2️⃣ now actually hire the driver into your company
+                                        final driverId = data['fromId'] as String;
+                                        await CompanyService().addDriverToCompany(
+                                          companyId: companyId,
+                                          driverId:  driverId,
+                                        );
+
+                                        // 3️⃣ user feedback
                                         ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Accepted')),
+                                          const SnackBar(content: Text('Request accepted — driver added')),
                                         );
                                       },
                                       child: const Text('Accept'),

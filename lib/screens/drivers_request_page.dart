@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
+import '../services/company_service.dart';
 import '../services/request_service.dart';
 
 class DriverRequestsPage extends StatelessWidget {
@@ -188,22 +189,26 @@ class DriverRequestsPage extends StatelessWidget {
                                       ElevatedButton(
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: Colors.green,
-                                          minimumSize:
-                                          const Size(80, 36),
+                                          minimumSize: const Size(80, 36),
                                         ),
                                         onPressed: () async {
-                                          await RequestService()
-                                              .respondToRequest(
-                                              doc.id, true);
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            const SnackBar(
-                                                content: Text(
-                                                    'Request accepted')),
+                                          // mark the request accepted
+                                          await RequestService().respondToRequest(doc.id, true);
+
+                                          // now actually hire the driver
+                                          final driverId = data['fromId'] as String;
+                                          await CompanyService().addDriverToCompany(
+                                            companyId: companyId,
+                                            driverId:  driverId,
+                                          );
+
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Request accepted — driver added')),
                                           );
                                         },
                                         child: const Text('Accept'),
                                       ),
+
                                       const SizedBox(height: 8),
                                       ElevatedButton(
                                         style: ElevatedButton.styleFrom(

@@ -32,7 +32,7 @@ class _DashboardPageState extends State<Dashboard>
   double _focus = 0;
   bool _openToWork = false;
   List<Trip> _recent = [];
-  late String companyId;
+  String? companyId;
 
   late final AnimationController _animC;
   late final Animation<double> _fadeIn;
@@ -56,8 +56,16 @@ class _DashboardPageState extends State<Dashboard>
         .collection('users')
         .doc(_uid)
         .get();
-    final data = docSnap.data();
-    companyId = data?['company'];
+    final data = docSnap.data()!;
+     // Build an empty list if `assignments` is missing
+     final rawAssigns = data['assignments'] as List<dynamic>? ?? [];
+     final assigns    = rawAssigns.cast<Map<String,dynamic>>();
+     // Look for the currently active stint
+     final active = assigns.firstWhere(
+       (a) => a['status']=='active',
+       orElse: () => <String,dynamic>{},
+     );
+     companyId = active.isNotEmpty ? active['companyId'] as String : null;
 
     final recentTrips = await _svc.fetchRecentTrips(limit: 3);
 
@@ -66,7 +74,7 @@ class _DashboardPageState extends State<Dashboard>
       _alerts     = stats.alertCount;
       _trips      = stats.tripCount;
       _focus      = stats.focusPercentage;
-      _openToWork = (docSnap.data()?['openToWork'] as bool?) ?? false;
+      _openToWork = (data['openToWork'] as bool?) ?? false;
       _recent     = recentTrips;
       _loading    = false;
     });
@@ -104,7 +112,7 @@ class _DashboardPageState extends State<Dashboard>
         elevation: 0,
         title: const Text('DriveSense', style: TextStyle(color: Colors.blueAccent,fontWeight: FontWeight.w600,fontFamily: 'Poppins')),
         actions: [
-          if (_openToWork)
+          if (companyId != null)
               IconButton(
                 icon: const Icon(Icons.chat_bubble_outline, color: Colors.blueAccent),
                 tooltip: "Chat with Admin",
@@ -113,7 +121,7 @@ class _DashboardPageState extends State<Dashboard>
                     context,
                     MaterialPageRoute(
                       builder: (_) => ChatScreen(
-                        companyId: companyId,
+                        companyId: companyId!,
                         peerId: _uid,
                       ),
                     ),

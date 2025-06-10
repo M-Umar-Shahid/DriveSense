@@ -3,6 +3,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'company_service.dart';
+
 class RequestService {
   final _db = FirebaseFirestore.instance;
   final _reqs = FirebaseFirestore.instance.collection('requests');
@@ -75,32 +77,32 @@ class RequestService {
     return true;
   }
 
-  /// Accepts or rejects a request, and if accepted, commits the assignment.
   Future<void> respondToRequest(String requestId, bool accept) async {
-    final reqRef = _db.collection('requests').doc(requestId);
+    final reqRef  = _db.collection('requests').doc(requestId);
     final reqSnap = await reqRef.get();
-    final data   = reqSnap.data()!;
-    final type   = data['type']  as String;
-    final fromId = data['fromId'] as String;
-    final toId   = data['toId']   as String;
+    final data    = reqSnap.data()!;
+    final type    = data['type']   as String;
+    final fromId  = data['fromId'] as String;
+    final toId    = data['toId']   as String;
 
-    // 1) Update status
+    // 1) Update the request’s status
     await reqRef.update({'status': accept ? 'accepted' : 'rejected'});
     if (!accept) return;
 
-    // 2) If accepted, do the actual assignment
+    // 2) If accepted, do the hire/join via your service
+    final cs = CompanyService();
     if (type == 'hire_driver') {
       // company → driver
-      await _db.collection('companies').doc(fromId).update({
-        'driverIds': FieldValue.arrayUnion([toId]),
-      });
-      await _db.collection('users').doc(toId).update({'company': fromId});
-    } else {
-      // join_company: driver → company
-      await _db.collection('companies').doc(toId).update({
-        'driverIds': FieldValue.arrayUnion([fromId]),
-      });
-      await _db.collection('users').doc(fromId).update({'company': toId});
+      await cs.addDriverToCompany(
+        companyId: fromId,
+        driverId:  toId,
+      );
+    } else if (type == 'join_company') {
+      // driver → company
+      await cs.addDriverToCompany(
+        companyId: toId,
+        driverId:  fromId,
+      );
     }
   }
 }
