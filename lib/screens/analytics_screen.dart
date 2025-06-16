@@ -17,7 +17,8 @@ import '../components/analytics_screen_components/recent_detections_list.dart';
 
 class AnalyticsPage extends StatefulWidget {
   final String driverId;
-  const AnalyticsPage({Key? key, required this.driverId}) : super(key: key);
+  final bool showBack;
+  const AnalyticsPage({Key? key, required this.driverId, this.showBack = true,}) : super(key: key);
 
   @override
   State<AnalyticsPage> createState() => _AnalyticsPageState();
@@ -137,13 +138,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         appBar: AppBar(
           backgroundColor: Colors.blueAccent,
           centerTitle: true,
-          leading: IconButton(
+          // only render a back button if showBack is true
+          leading: widget.showBack
+              ? IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
+            onPressed: () => Navigator.of(context).pop(),
+          )
+              : null,
+          automaticallyImplyLeading: false,   // prevents default back arrow
+          title: const Text('Analytics',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)
           ),
-          title: const Text('Analytics', style: TextStyle(fontWeight: FontWeight.bold,color: Colors.white)),
           bottom: TabBar(
             indicator: UnderlineTabIndicator(
               borderSide: BorderSide(width: 3, color: Colors.white),

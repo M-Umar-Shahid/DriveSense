@@ -25,7 +25,7 @@ class _MainAppScreenState extends State<MainAppScreen> {
   Widget build(BuildContext context) {
     final pages = [
       const Dashboard(),
-      AnalyticsPage(driverId: _uid),
+      AnalyticsPage(driverId: _uid,showBack: false,),
       const ProfilePage(),
     ];
 
