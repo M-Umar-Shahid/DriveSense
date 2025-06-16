@@ -39,20 +39,16 @@ class DashboardService {
 
 
 
-  Future<List<Trip>> fetchAllTrips() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return [];
-
+  Future<List<Trip>> fetchAllTrips({required String driverId}) async {
     final snap = await FirebaseFirestore.instance
         .collection('trips')
-        .where('uid', isEqualTo: user.uid)
+        .where('uid', isEqualTo: driverId)
         .orderBy('startTime', descending: true)
         .get();
 
     return snap.docs.map((doc) {
-      // doc.data() is Map<String,dynamic>
       return Trip.fromMap(
-        doc.id,                  // ← supply the document ID here
+        doc.id,                  // document ID
         doc.data() as Map<String, dynamic>,
       );
     }).toList();

@@ -121,6 +121,7 @@ class _SignUpPageState extends State<SignUpPage> {
           'email':          user.email,
           'role':           'driver',
           'openToWork':     false,
+          'photoURL':    user.photoURL,
           'companyHistory': <String>[],
           'assignments':    <Map<String,dynamic>>[],
         });

@@ -31,7 +31,7 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
     final liveEmb = await _svc.captureLiveEmbedding();
     if (liveEmb != null && _svc.storedEmbedding != null) {
       final dist = _svc.compare(liveEmb, _svc.storedEmbedding!);
-      if (dist < 0.6) {
+      if (dist < 0.5) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const MainAppScreen()),
               (route) => false,

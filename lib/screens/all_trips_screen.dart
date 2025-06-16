@@ -6,7 +6,11 @@ import '../models/trip.dart';
 import '../services/dashboard_sevice.dart';
 
 class AllTripsPage extends StatefulWidget {
-  const AllTripsPage({Key? key}) : super(key: key);
+  final String driverId;   // ← new
+  const AllTripsPage({
+    Key? key,
+    required this.driverId,
+  }) : super(key: key);
 
   @override
   State<AllTripsPage> createState() => _AllTripsPageState();
@@ -81,7 +85,7 @@ class _AllTripsPageState extends State<AllTripsPage> {
             // ─── Trip List ────────────────────────────────
             Expanded(
               child: FutureBuilder<List<Trip>>(
-                future: _svc.fetchAllTrips(),
+                future: _svc.fetchAllTrips(driverId: widget.driverId),
                 builder: (context, snap) {
                   if (snap.connectionState != ConnectionState.done) {
                     return const Center(child: CircularProgressIndicator());
@@ -91,7 +95,14 @@ class _AllTripsPageState extends State<AllTripsPage> {
                   }
 
                   // 1️⃣ Get all trips, then apply date filter if set
-                  final allTrips = snap.data!;
+                  // 1️⃣ Remove any trips whose startTime or endTime was null in Firestore
+                  final allTrips = snap.data!
+                      .where((t) =>
+                  // only keep trips where both times are non‐null
+                  t.startTime != null && t.endTime != null
+                  ).toList();
+
+                  // 2️⃣ Now apply your _selectedDate filter as before
                   final trips = _selectedDate == null
                       ? allTrips
                       : allTrips.where((t) {
@@ -100,6 +111,7 @@ class _AllTripsPageState extends State<AllTripsPage> {
                         && d.month == _selectedDate!.month
                         && d.day == _selectedDate!.day;
                   }).toList();
+
 
                   if (trips.isEmpty) {
                     return const Center(child: Text('No trips for selected date.'));

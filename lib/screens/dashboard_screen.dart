@@ -25,6 +25,9 @@ class _DashboardPageState extends State<Dashboard>
     with SingleTickerProviderStateMixin {
   final _svc = DashboardService();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
+  String? _imageUrl;
+
+
 
   bool _loading = true;
   String _username = '';
@@ -40,6 +43,8 @@ class _DashboardPageState extends State<Dashboard>
   @override
   void initState() {
     super.initState();
+    final user = FirebaseAuth.instance.currentUser;
+    _imageUrl = user?.photoURL;
     _animC = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -181,10 +186,17 @@ class _DashboardPageState extends State<Dashboard>
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(children: [
-        const CircleAvatar(
+        CircleAvatar(
+          radius: 24,                               // whatever size you want
           backgroundColor: Colors.white24,
-          child: Icon(Icons.person, color: Colors.white),
+          backgroundImage: _imageUrl != null
+              ? NetworkImage(_imageUrl!)
+              : null,                               // no image → show child
+          child: _imageUrl == null
+              ? const Icon(Icons.person, color: Colors.white)
+              : null,                               // with image → no icon
         ),
+
         const SizedBox(width: 16),
         Expanded(
           child: Column(
@@ -213,7 +225,7 @@ class _DashboardPageState extends State<Dashboard>
           child: InkWell(
             onTap: () {
               Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const AllTripsPage())
+                  MaterialPageRoute(builder: (_) => AllTripsPage(driverId: _uid,))
               );
             },
             child: _overviewCard(
@@ -231,7 +243,7 @@ class _DashboardPageState extends State<Dashboard>
           child: InkWell(
             onTap: () {
               Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const ImageAlertsPage())
+                  MaterialPageRoute(builder: (_) => ImageAlertsPage(driverId: _uid,))
               );
             },
             child: _overviewCard(
@@ -332,7 +344,7 @@ class _DashboardPageState extends State<Dashboard>
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const ImageAlertsPage()),
+                MaterialPageRoute(builder: (_) => ImageAlertsPage(driverId: _uid,)),
               );
             },
           ),
@@ -350,7 +362,7 @@ class _DashboardPageState extends State<Dashboard>
         TextButton(
           onPressed: () {
             Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const AllTripsPage()));
+                MaterialPageRoute(builder: (_) => AllTripsPage(driverId: _uid,)));
           },
           child: const Text('View All'),
         )

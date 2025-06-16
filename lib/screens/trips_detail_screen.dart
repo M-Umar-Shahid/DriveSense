@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../models/alert.dart';
 import '../models/trip.dart';
+import 'full_screen_image_view.dart';
 
 class TripDetailsPage extends StatefulWidget {
   final Trip trip;
@@ -177,51 +178,63 @@ class _TripDetailsPageState extends State<TripDetailsPage> {
                   crossAxisCount: 2,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
-                  childAspectRatio: 1,  // square
+                  childAspectRatio: 1,
                 ),
                 itemBuilder: (ctx, i) {
                   final a = display[i];
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade200),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
-                          blurRadius: 6,
-                          offset: const Offset(0, 3),
-                        )
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                            child: Image.network(a.imageUrl, fit: BoxFit.cover),
-                          ),
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => FullScreenImageView(imageUrl: a.imageUrl),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(a.type, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              ),
-                              Text(
-                                DateFormat('hh:mm a').format(a.timestamp),
-                                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                              ),
-                            ],
+                      );
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          )
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                              child: Image.network(a.imageUrl, fit: BoxFit.cover),
+                            ),
                           ),
-                        ),
-                      ],
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(a.type, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                ),
+                                Text(
+                                  DateFormat('hh:mm a').format(a.timestamp),
+                                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 },
               ),
+
           ],
         ),
       ),

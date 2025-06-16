@@ -261,22 +261,80 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
                       final id   = docs[i].id;
                       final name = m['displayName'] as String? ?? 'No name';
 
-                      return Card(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 2,
-                        child: ListTile(
-                          title: Text(name),
-                          subtitle: Text(m['email'] ?? ''),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.remove_circle, color: Colors.red),
-                            onPressed: () => _confirmFire(id, name),
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => DriverDetailPage(driverId: id)),
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.04),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              )
+                            ],
                           ),
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => DriverDetailPage(driverId: id)),
+                          child: Row(
+                            children: [
+                              // Avatar
+                              CircleAvatar(
+                                radius: 28,
+                                backgroundColor: Colors.grey.shade200,
+                                backgroundImage: (m['photoURL'] as String?)?.isNotEmpty == true
+                                    ? NetworkImage(m['photoURL'])
+                                    : null,
+                                child: ((m['photoURL'] as String?)?.isNotEmpty == true)
+                                    ? null
+                                    : Text(
+                                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(width: 16),
+
+                              // Name & Email
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      m['email'] ?? '',
+                                      style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // Fire button
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle, color: Colors.redAccent, size: 28),
+                                onPressed: () => _confirmFire(id, name),
+                              ),
+                            ],
                           ),
                         ),
                       );
+
                     },
                   );
                 },

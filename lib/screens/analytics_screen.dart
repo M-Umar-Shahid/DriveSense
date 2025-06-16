@@ -137,6 +137,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         appBar: AppBar(
           backgroundColor: Colors.blueAccent,
           centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
           title: const Text('Analytics', style: TextStyle(fontWeight: FontWeight.bold,color: Colors.white)),
           bottom: TabBar(
             indicator: UnderlineTabIndicator(

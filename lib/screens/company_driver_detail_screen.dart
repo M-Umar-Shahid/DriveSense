@@ -1,11 +1,15 @@
 // lib/screens/driver_detail_page.dart
 
+import 'package:drivesense/screens/all_trips_screen.dart';
+import 'package:drivesense/screens/analytics_screen.dart';
+import 'package:drivesense/screens/image_alerts_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/dashboard_stats.dart';
 import '../services/company_service.dart';
-import '../services/dashboard_sevice.dart';   // for rating
+import '../services/dashboard_sevice.dart';
+import 'full_screen_image_view.dart';   // for rating
 
 class DriverDetailPage extends StatelessWidget {
   final String driverId;
@@ -26,12 +30,6 @@ class DriverDetailPage extends StatelessWidget {
               icon: const Icon(Icons.arrow_back, color: Colors.white),
               onPressed: () => Navigator.pop(context),
             ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.camera_alt, color: Colors.white),
-                onPressed: () { /* your camera action */ },
-              ),
-            ],
             backgroundColor: Colors.transparent,
             expandedHeight: 260,
             pinned: true,
@@ -65,7 +63,9 @@ class DriverDetailPage extends StatelessWidget {
                         const SizedBox(height: 48), // leave room for status bar
                         StreamBuilder<DocumentSnapshot>(
                           stream: FirebaseFirestore.instance
-                              .collection('users').doc(driverId).snapshots(),
+                              .collection('users')
+                              .doc(driverId)
+                              .snapshots(),
                           builder: (_, snap) {
                             if (!snap.hasData) {
                               return const CircleAvatar(
@@ -74,19 +74,35 @@ class DriverDetailPage extends StatelessWidget {
                                 child: CircularProgressIndicator(color: Colors.white),
                               );
                             }
-                            final data = snap.data!.data()! as Map<String, dynamic>;
+
+                            final data = snap.data!.data() as Map<String, dynamic>;
                             final name = data['displayName'] as String? ?? '';
+                            final photoUrl = data['photoURL'] as String?;
+                            final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+
                             return CircleAvatar(
                               radius: 48,
-                              backgroundColor: Colors.white,
-                              child: Text(
-                                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                              backgroundColor: Colors.grey.shade200,
+                              backgroundImage:
+                              (photoUrl != null && photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
+
+                              // only attach an error handler if we actually have a NetworkImage
+                              onBackgroundImageError: (photoUrl != null && photoUrl.isNotEmpty)
+                                  ? (_, __) {
+                                // optional: setState to flip to an "image failed" fallback
+                              }
+                                  : null,
+
+                              child: (photoUrl == null || photoUrl.isEmpty)
+                                  ? Text(
+                                initial,
                                 style: const TextStyle(
                                   fontSize: 32,
                                   color: Color(0xFF1976D2),
                                   fontWeight: FontWeight.bold,
                                 ),
-                              ),
+                              )
+                                  : null,
                             );
                           },
                         ),
@@ -152,28 +168,34 @@ class DriverDetailPage extends StatelessWidget {
                         label: 'Trips',
                         value: stats.tripCount.toString(),
                         color: Colors.teal,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => AllTripsPage(driverId: driverId)),
+                          );
+                        },
                       ),
                       _ColorStatCard(
                         icon: Icons.warning_amber,
                         label: 'Alerts',
                         value: stats.alertCount.toString(),
                         color: Colors.redAccent,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => ImageAlertsPage(driverId: driverId)),
+                          );
+                        },
                       ),
                       _ColorStatCard(
                         icon: Icons.remove_red_eye,
                         label: 'Focus',
                         value: '${stats.focusPercentage.toStringAsFixed(0)}%',
                         color: Colors.blue,
-                      ),
-                      FutureBuilder<double>(
-                        future: companySvc.getAverageRating(driverId),
-                        builder: (ctx, r) {
-                          final rating = r.data ?? 0.0;
-                          return _ColorStatCard(
-                            icon: Icons.star,
-                            label: 'Rating',
-                            value: rating.toStringAsFixed(1),
-                            color: Colors.amber,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => AnalyticsPage(driverId: driverId)),
                           );
                         },
                       ),
@@ -234,34 +256,50 @@ class DriverDetailPage extends StatelessWidget {
             ),
           ),
           SliverToBoxAdapter(child: SizedBox(height: 8)),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 140,
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('detections')
-                    .where('uid', isEqualTo: driverId)
-                    .orderBy('timestamp', descending: true)
-                    .limit(5)
-                    .snapshots(),
-                builder: (_, s) {
-                  if (!s.hasData) return Center(child: CircularProgressIndicator());
-                  return ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: s.data!.docs.length,
-                    separatorBuilder: (_,__) => SizedBox(width: 12),
-                    itemBuilder: (_, i) {
-                      final doc = s.data!.docs[i].data() as Map;
-                      final ts = (doc['timestamp'] as Timestamp).toDate();
-                      return _AlertCard(
-                        type: doc['alertType'] ?? 'Alert',
-                        time: '${ts.hour.toString().padLeft(2,'0')}:'
-                            '${ts.minute.toString().padLeft(2,'0')}',
-                      );
-                    },
-                  );
-                },
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            sliver: SliverToBoxAdapter(
+              child: SizedBox(
+                height: 140,
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('detections')
+                      .where('uid', isEqualTo: driverId)
+                      .orderBy('timestamp', descending: true)
+                      .limit(5)
+                      .snapshots(),
+                  builder: (_, s) {
+                    if (!s.hasData) return Center(child: CircularProgressIndicator());
+                    return ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: EdgeInsets.symmetric(horizontal: 16,vertical: 10),
+                      itemCount: s.data!.docs.length,
+                      separatorBuilder: (_,__) => SizedBox(width: 12),
+                      itemBuilder: (_, i) {
+                        final docMap = s.data!.docs[i].data() as Map<String, dynamic>;
+                        final ts     = (docMap['timestamp'] as Timestamp).toDate();
+                        final imgUrl = docMap['imageUrl'] as String? ?? '';
+
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FullScreenImageView(imageUrl: imgUrl),
+                              ),
+                            );
+                          },
+                          child: _AlertCard(
+                            type: docMap['alertType'] ?? 'Alert',
+                            time: '${ts.hour.toString().padLeft(2,'0')}:'
+                                '${ts.minute.toString().padLeft(2,'0')}',
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
             ),
           ),
@@ -275,42 +313,56 @@ class _ColorStatCard extends StatelessWidget {
   final IconData icon;
   final String label, value;
   final Color color;
+  final VoidCallback? onTap;
+
   const _ColorStatCard({
-    required this.icon, required this.label,
-    required this.value, required this.color,
-  });
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    this.onTap,
+    Key? key,
+  }) : super(key: key);
+
   @override
   Widget build(BuildContext c) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6)],
-      ),
-      child: Row(
-        children: [
-          Container(width: 6, height: double.infinity, color: color),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(icon, size: 28, color: color),
-                  SizedBox(height: 8),
-                  Text(value,
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text(label, style: TextStyle(color: Colors.grey)),
-                ],
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6)],
+        ),
+        child: Row(
+          children: [
+            Container(width: 6, height: double.infinity, color: color),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min, // shrink to content
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(icon, size: 28, color: color),
+                    const SizedBox(height: 8),
+                    Text(
+                      value,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    Text(label, style: const TextStyle(color: Colors.grey)),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
+
 /// A simple timeline entry with a colored circle and left border
 class _TimelineTile extends StatelessWidget {
   final String title, dateRange;

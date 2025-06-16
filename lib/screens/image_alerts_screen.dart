@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import 'package:lottie/lottie.dart';
-import '../../models/alert.dart';
-import '../../services/image_alerts_service.dart';
-import '../components/image_alerts_screen_component/alert_card.dart';
+
+import '../models/alert.dart';
+import '../services/image_alerts_service.dart';
 import 'full_screen_image_view.dart';
 import 'main_app_screen.dart';
 
 class ImageAlertsPage extends StatefulWidget {
-  const ImageAlertsPage({Key? key}) : super(key: key);
+  final String driverId;
+  const ImageAlertsPage({Key? key, required this.driverId}) : super(key: key);
 
   @override
   State<ImageAlertsPage> createState() => _ImageAlertsPageState();
@@ -52,6 +54,7 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
     setState(() => _loadingPage = true);
 
     final snap = await _service.fetchAlertsPage(
+      driverId: widget.driverId,  // ← pass the driverId
       filter: _filter,
       pageSize: _pageSize,
       startAfterDoc: _lastDoc,
@@ -102,16 +105,13 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 1,
-        title: const Text('Image Alerts',
-            style: TextStyle(color: Colors.black)),
+        title: const Text('Image Alerts', style: TextStyle(color: Colors.black)),
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const MainAppScreen()),
-                (r) => false,
-          ),
+          onPressed: () => Navigator.of(context).pop(),
         ),
+
         actions: [
           IconButton(
             icon: const Icon(Icons.filter_list, color: Colors.blueAccent),
@@ -122,8 +122,7 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
       body: _alerts.isEmpty && _loadingPage
           ? const Center(child: CircularProgressIndicator())
           : Padding(
-        padding:
-        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: GridView.builder(
           controller: _scrollController,
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -133,9 +132,8 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
             childAspectRatio: 3 / 4,
           ),
           itemCount: _alerts.length + (_hasMore ? 1 : 0),
-          // <-- note two parameters here: context and index
           itemBuilder: (BuildContext context, int index) {
-            // if we've scrolled to the “loading” slot
+            // “Loading” indicator slot
             if (index >= _alerts.length) {
               return AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
@@ -155,16 +153,16 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
               );
             }
 
-            // now it's safe to grab the alert at `index`
-            final a = _alerts[index];
-            return _buildAnimatedCard(a, index);
+            // Real alert card
+            final alert = _alerts[index];
+            return _buildAnimatedCard(alert);
           },
         ),
       ),
     );
   }
 
-  Widget _buildAnimatedCard(Alert a, int index) {
+  Widget _buildAnimatedCard(Alert a) {
     return Material(
       elevation: 4,
       borderRadius: BorderRadius.circular(16),
@@ -182,27 +180,47 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
             Expanded(
               child: Hero(
                 tag: a.imageUrl,
-                child: FadeInImage.assetNetwork(
-                  placeholder: 'assets/placeholder.jpg',
-                  image: a.imageUrl,
-                  fit: BoxFit.cover,
+                child: ClipRRect(
+                  borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: Image.network(
+                    a.imageUrl,
+                    fit: BoxFit.cover,
+                    // show a gray box while loading
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        color: Colors.grey.shade300,
+                        child: const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      );
+                    },
+                    // optional: handle load errors
+                    errorBuilder: (context, error, stack) {
+                      return Container(
+                        color: Colors.grey.shade300,
+                        child: const Icon(Icons.broken_image, size: 48, color: Colors.grey),
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
             Padding(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              child: Text(
-                a.type,
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 14),
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Text(a.type,
+                  style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             ),
             Padding(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Text(
-                a.timestamp.toLocal().toString().split('.')[0],
+                DateFormat.yMMMd().add_jm().format(a.timestamp.toLocal()),
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
             ),
@@ -211,4 +229,5 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
       ),
     );
   }
+
 }
