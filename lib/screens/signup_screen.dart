@@ -194,24 +194,11 @@ class _SignUpPageState extends State<SignUpPage> {
       return;
     }
 
-    if (_isCompanyAdmin) {
-      // admin: skip face enrollment
-      _completeRegistration([], email, pass, name);
-    } else {
-      // driver: go enroll face first
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => FaceEnrollmentPage(
-            email:       email,
-            password:    pass,
-            displayName: name,
-            onEnrollmentComplete: _completeRegistration,
-          ),
-        ),
-      );
-    }
+    // For both admins and drivers, just complete registration.
+    // Face enrollment will be triggered later on first login when appropriate.
+    _completeRegistration([], email, pass, name);
   }
+
 
   void _showError(String msg) {
     setState(() { _error = msg; });

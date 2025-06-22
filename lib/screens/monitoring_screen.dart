@@ -11,92 +11,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_mediapipe/flutter_mediapipe.dart';
 import 'package:flutter_mediapipe/gen/landmark.pb.dart';
 import 'package:image/image.dart' as img;
-import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../model_inference/seatbelt_isolate.dart';
 import '../utils/distraction_detector.dart';
-import 'dashboard_screen.dart';
 
 
 const int maxDet = 8400;
 const double detectionThreshold = 0.5;
 Size _imageSize = Size.zero;
-
-
-class BeltTrack {
-  final int id;
-  Rect box;
-  int missed = 0;
-  BeltTrack(this.id, this.box);
-}
-
-class MiniSort {
-  List<BeltTrack> tracks = [];
-  int _nextId = 0;
-  static const double iouThresh = 0.3;
-  static const int maxMissed = 5;
-
-  List<BeltTrack> update(List<Rect> dets) {
-    final matched = <int,int>{};
-
-    // 1) build IoU matrix
-    final iou = List.generate(tracks.length, (i) =>
-        List.generate(dets.length, (j) => _iou(tracks[i].box, dets[j]))
-    );
-
-    // 2) greedy match
-    while (true) {
-      double best = 0; int ti = -1, di = -1;
-      for (var i = 0; i < tracks.length; i++) {
-        for (var j = 0; j < dets.length; j++) {
-          if (!matched.containsKey(i) &&
-              !matched.containsValue(j) &&
-              iou[i][j] > best) {
-            best = iou[i][j];
-            ti = i;
-            di = j;
-          }
-        }
-      }
-      if (best < iouThresh) break;
-      matched[ti] = di;
-    }
-
-    // 3) update / age
-    for (var i = 0; i < tracks.length; i++) {
-      if (matched.containsKey(i)) {
-        tracks[i].box = dets[matched[i]!];
-        tracks[i].missed = 0;
-      } else {
-        tracks[i].missed++;
-      }
-    }
-
-    // 4) prune old
-    tracks.removeWhere((t) => t.missed > maxMissed);
-
-    // 5) spawn new
-    for (var j = 0; j < dets.length; j++) {
-      if (!matched.containsValue(j)) {
-        tracks.add(BeltTrack(_nextId++, dets[j]));
-      }
-    }
-
-    return tracks;
-  }
-
-  double _iou(Rect a, Rect b) {
-    final inter = a.intersect(b);
-    if (inter.isEmpty) return 0.0;
-    final union = a.area + b.area - inter.area;
-    return inter.area / union;
-  }
-}
-
-extension on Rect {
-  double get area => width * height;
-}
 
 class MonitoringPage extends StatefulWidget {
   const MonitoringPage({Key? key}) : super(key: key);
@@ -117,6 +40,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   int _cameraViewKey = 0;
   FlutterMediapipe? _mpController;
   Uint8List? _latestSeatbeltJpeg;
+  bool _attached = false;
 
   StreamSubscription? _frameSubscription;
   StreamSubscription? _fromIsolateSubscription;
@@ -152,9 +76,6 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     "Smoking"
   ];
 
-  // In your _MonitoringPageState:
-  final _tracker = MiniSort();
-
   late final FlutterTts _tts;
   String? _currentAlert;
   final Map<String, DateTime> _lastSpoken = {};
@@ -183,7 +104,9 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _attached = true);
+    });
     WakelockPlus.enable();
 
 
@@ -676,21 +599,23 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
         alignment: Alignment.center,
         children: [
           SizedBox(
+            key: ValueKey(_cameraViewKey),
             height: 500,
             width: 300,
             child: NativeView(
-              onViewCreated: (controller) {
+              onViewCreated: (controller) async {
+
                 _mpController = controller;
 
+                // Now start listening—PixelCopy will succeed:
                 controller.landMarksStream.listen((landmarks) {
                   if (_isAnalyzing) _onLandmarkStream(landmarks);
                 });
 
-                if (!_seatbeltIsolateReady) {
-                  _spawnSeatbeltIsolate(); // ✅ safe to spawn here
-                }
+                if (!_seatbeltIsolateReady) _spawnSeatbeltIsolate();
               },
             ),
+
 
           ),
 
@@ -865,7 +790,6 @@ class SeatbeltBoxPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant SeatbeltBoxPainter old) {
-    // repaint whenever the box list changes
     return old.boxes    != boxes
         || old.imageSize != imageSize;
 

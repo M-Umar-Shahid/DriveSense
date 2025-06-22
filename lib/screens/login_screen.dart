@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../models/user_profile.dart';       // if you want to use the typed model
+import '../models/user_profile.dart';
 import '../services/auth_service.dart';
+import 'emailverifygatepage.dart';
 import 'face_enrollment_screen.dart';
 import 'face_recognition_screen.dart';
 import 'main_app_screen.dart';
@@ -29,69 +30,36 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _login() async {
     setState(() { _isLoading = true; _error = null; });
-
     final email = _emailCtrl.text.trim();
     final pwd   = _passwordCtrl.text.trim();
 
-    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
-      setState(() { _isLoading = false; _error = 'Invalid email'; });
-      return;
-    }
-
     try {
-      // 1) Sign in
       await _authService.signIn(email, pwd);
+      final user = _auth.currentUser!;
+      await user.reload();
 
-      // 2) Load user profile from Firestore
-      final uid = _auth.currentUser!.uid;
-      final doc = await FirebaseFirestore.instance
-          .collection('users').doc(uid).get();
-      if (!doc.exists) throw 'Profile not found';
-
-      // 3) Parse fields
-      final data = doc.data()!;
-      final role = data['role'] as String? ?? 'driver';
-      final emb  = (data['faceEmbedding'] as List<dynamic>?) ?? [];
-
-      // 4) Route based on role & embedding
-      if (role == 'company_admin') {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const CompanyAdminMainScreen()),
-              (_) => false,
-        );
-      } else {
-        if (emb.isEmpty) {
-          // needs face enrollment
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => FaceEnrollmentPage(
-                email:       email,
-                password:    pwd,
-                displayName: data['displayName'] as String? ?? '',
-                onEnrollmentComplete: (newEmb, e, p, n) async {
-                  await doc.reference.update({'faceEmbedding': newEmb});
-                  if (!mounted) return;
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => const MainAppScreen()),
-                  );
-                },
-              ),
+      if (!user.emailVerified) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EmailVerifyGatePage(
+              onVerified: () {
+                Navigator.pop(context);
+                _continueAfterSignIn(user, email, pwd);
+              },
             ),
-          );
-        } else {
-          // go to recognition, which then pushes to MainAppScreen
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const FaceRecognitionPage()),
-          );
-        }
+          ),
+        );
+        return;
       }
+
+      await _continueAfterSignIn(user, email, pwd);
+
     } catch (e) {
       setState(() => _error = e.toString());
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Login failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login failed: $e')),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -170,7 +138,6 @@ class _LoginPageState extends State<LoginPage> {
                   )),
               const SizedBox(height: 30),
 
-              // white card
               Flexible(
                 fit: FlexFit.loose,
                 child: Container(
@@ -195,7 +162,6 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 24),
 
-                        // email
                         TextField(
                           controller: _emailCtrl,
                           keyboardType: TextInputType.emailAddress,
@@ -213,7 +179,6 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // password
                         TextField(
                           controller: _passwordCtrl,
                           obscureText: !_showPassword,
@@ -269,7 +234,6 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 12),
 
-                        // Forgot password
                         TextButton(
                           onPressed: () => Navigator.push(
                             context,
@@ -337,5 +301,45 @@ class _LoginPageState extends State<LoginPage> {
         ),
       ),
     );
+  }
+  Future<void> _continueAfterSignIn(User user, String email, String pwd) async {
+    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    if (!doc.exists) throw 'Profile not found';
+    final data = doc.data()!;
+    final role = data['role'] as String? ?? 'driver';
+    final emb  = (data['faceEmbedding'] as List<dynamic>?) ?? [];
+
+    if (role == 'company_admin') {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const CompanyAdminMainScreen()),
+            (_) => false,
+      );
+    } else {
+      if (emb.isEmpty) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => FaceEnrollmentPage(
+              email:       email,
+              password:    pwd,
+              displayName: data['displayName'] as String? ?? '',
+              onEnrollmentComplete: (newEmb, e, p, n) async {
+                await doc.reference.update({'faceEmbedding': newEmb});
+                if (!mounted) return;
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MainAppScreen()),
+                );
+              },
+            ),
+          ),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const FaceRecognitionPage()),
+        );
+      }
+    }
   }
 }
