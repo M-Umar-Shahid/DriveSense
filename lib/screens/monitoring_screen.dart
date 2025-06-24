@@ -13,6 +13,7 @@ import 'package:flutter_mediapipe/gen/landmark.pb.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../model_inference/distraction_isolate.dart';
 import '../model_inference/seatbelt_isolate.dart';
 import '../utils/distraction_detector.dart';
 
@@ -37,10 +38,10 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   double _mouthOpenness = 0.0;
   List<Rect> _noSeatbeltBoxes = [];
   img.Image? _lastFrameImage;
-  int _cameraViewKey = 0;
   FlutterMediapipe? _mpController;
   Uint8List? _latestSeatbeltJpeg;
   bool _attached = false;
+  int? _discInputSize;
 
   StreamSubscription? _frameSubscription;
   StreamSubscription? _fromIsolateSubscription;
@@ -67,6 +68,19 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   late final ReceivePort _fromIsolate;  // to receive bounding boxes back
   Isolate? _seatbeltIsolate;            // the spawned Isolate
   bool _seatbeltIsolateReady = false;   // true once the isolate sends us its SendPort
+
+  final GlobalKey _cameraViewKey = GlobalKey();
+
+
+  //--- distraction isolate fields
+  late ReceivePort    _distReceivePort;
+  SendPort?           _distSendPort;
+  StreamSubscription? _distSub;
+  bool                _distReady = false;
+
+// reuse this for sending each frame
+  Uint8List?          _latestFrameJpeg;
+
 
 
   final List<String> distractionLabels = [
@@ -120,46 +134,34 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
 
 
   void _onUtteranceComplete() {
-    // once a message finishes, clear current
     _currentAlert = null;
   }
 
   void _updateAlertSpeech() {
-    // 1️⃣ Pick the highest‐priority active alert:
     String? next;
-
-    // ── Seatbelt highest ────────────────────────────────────
     if (_noSeatbelt) {
       next = 'seatbelt';
     }
-    // ── Then distraction ───────────────────────────────────
     else if (_isDistracted) {
       next = 'distraction';
     }
-    // ── Then drowsy/yawning ────────────────────────────────
     else if (_isDrowsy) {
       next = 'drowsy';
     } else if (_isYawning) {
       next = 'yawning';
     }
-
-    // 2️⃣ If nothing’s active, stop speaking:
     if (next == null) {
       _currentAlert = null;
       _tts.stop();
       return;
     }
 
-    // 3️⃣ Don’t re-speak the same alert if it’s still playing:
     if (_currentAlert == next) return;
-
-    // 4️⃣ Enforce per-alert cooldown:
     final now      = DateTime.now();
     final lastTime = _lastSpoken[next];
     final cooldown = _cooldowns[next]!;
     if (lastTime != null && now.difference(lastTime) < cooldown) return;
 
-    // 5️⃣ Build the message for this alert:
     final messages = {
       'seatbelt':    'Warning: No seatbelt detected. Please buckle up.',
       'distraction': 'Warning: Distraction detected. Keep your eyes on the road.',
@@ -168,7 +170,6 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     };
     final msg = messages[next]!;
 
-    // 6️⃣ Record and speak:
     _currentAlert     = next;
     _lastSpoken[next] = now;
     _tts.stop();
@@ -177,18 +178,38 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
 
   @override
   void dispose() {
+    // 1️⃣ Stop TTS and your analysis loop
     _tts.stop();
     _stopAnalyzing();
+
+    // 2️⃣ Cancel the raw frame subscription
     _frameSubscription?.cancel();
+
+
+    // 4️⃣ Drop the reference to the NativeView controller
     _mpController = null;
-    _seatbeltIsolate?.kill(priority: Isolate.immediate);
-    _seatbeltIsolate = null;
+
+    // 5️⃣ If you’re also using a Flutter CameraController, dispose it
+
+    // 6️⃣ Clean up the seatbelt isolate
     _fromIsolateSubscription?.cancel();
     _fromIsolate.close();
+    _seatbeltIsolate?.kill(priority: Isolate.immediate);
+    _seatbeltIsolate = null;
+
+    // 7️⃣ Clean up the distraction isolate
+    _distSub?.cancel();
+    _distReceivePort.close();
+
+    // 8️⃣ Remove observers and wakelock
     WidgetsBinding.instance.removeObserver(this);
     WakelockPlus.disable();
+
     super.dispose();
   }
+
+
+
 
 
   void _stopAnalyzing() {
@@ -205,6 +226,45 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     }
     _mpController = null;
   }
+
+  Future<void> _spawnDistractionIsolate() async {
+    final raw = await rootBundle.load('assets/models/distraction.tflite');
+    final bytes = raw.buffer.asUint8List();
+
+    _distReceivePort = ReceivePort();
+    await Isolate.spawn<List<dynamic>>(
+      distractionIsolateEntry,
+      [_distReceivePort.sendPort, bytes],
+    );
+
+    _distReceivePort.listen((msg) {
+      if (msg is Map && msg.containsKey('inputSize')) {
+        _discInputSize = msg['inputSize'] as int;
+      }
+      if (msg is SendPort) {
+        _distSendPort = msg;
+        _distReady    = true;
+        print("✅ [Main] distraction isolate ready");
+      } else if (msg is DistractionResult) {
+          final idx  = msg.classIndex;
+          final conf = msg.confidence;
+        print("⬅️ [Main] distraction idx=$idx conf=$conf");
+
+        setState(() {
+          if (idx < 0 || conf < 0.3) {
+            _isDistracted = false;
+            _currentDistractionLabel = 'Safe Driving';
+            _currentDistractionConfidence = 0.0;
+          } else {
+            _isDistracted = true;
+            _currentDistractionLabel = distractionLabels[idx];
+            _currentDistractionConfidence = conf;
+          }
+        });
+      }
+    });
+  }
+
 
   void _spawnSeatbeltIsolate () async{
     print("🚀 [Main] Spawning seatbelt isolate...");
@@ -280,7 +340,7 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       _shouldRestartOnResume = false;
 
       // 1) Force Flutter to dispose & recreate the camera view
-      setState(() => _cameraViewKey++);
+      // setState(() => _cameraViewKey++);
 
       // 2) Give it a moment, then restart analysis
       Future.delayed(const Duration(milliseconds: 300), () {
@@ -288,22 +348,9 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       });
     }
   }
-
-  // Future<void> _loadSeatbeltModel() async {
-  //   _seatbeltInterpreter = await Interpreter.fromAsset('assets/models/seatbelt.tflite');
-  //   debugPrint('✅ Seatbelt model loaded');
-  //   // ← Trigger a rebuild so the button sees the non-null interpreter
-  //   if (mounted) setState(() {});
-  // }
-
-  Future<void> toggleAnalyzing() async {
+    Future<void> toggleAnalyzing() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-
-    // Ensure the seatbelt model is loaded:
-    // if (_seatbeltInterpreter == null) {
-    //   await _loadSeatbeltModel();
-    // }
 
     if (!_isAnalyzing) {
       // ── START ANALYSIS ──────────────────────────────────
@@ -332,13 +379,11 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
         _isAnalyzing = true;
       });
 
-      // Give the SurfaceView ~100 ms to attach before subscribing:
-      await Future.delayed(const Duration(milliseconds: 100));
 
       // Only subscribe if we didn’t already subscribe:
-      if (_frameSubscription == null) {
-        _listenToFrameStream();
-      }
+      // if (_frameSubscription == null) {
+      //   _listenToFrameStream();
+      // }
     } else {
       // ── STOP ANALYSIS ───────────────────────────────────
       // 1) Cancel the frame subscription (if it exists)
@@ -365,52 +410,67 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
 
 
   void _listenToFrameStream() {
-    // If we already have an active subscription, do nothing:
+    // 1️⃣ Only subscribe once
     if (_frameSubscription != null) {
       debugPrint("⚠️ Frame stream already active");
       return;
     }
 
     debugPrint("🛰️ Subscribed to frame stream");
-    _frameSubscription = _frameStream.receiveBroadcastStream().listen(
+    _frameSubscription = _frameStream
+        .receiveBroadcastStream()
+        .listen(
           (event) async {
         if (!_isAnalyzing) return;
 
         if (event is Uint8List) {
+          // 2️⃣ Decode the raw bytes into an Image
           final image = img.decodeImage(event);
           if (image == null) return;
           _lastFrameImage = image;
           setState(() {
-            _imageSize = Size(image.width.toDouble(), image.height.toDouble());
+            _imageSize = Size(
+              image.width.toDouble(),
+              image.height.toDouble(),
+            );
           });
 
+          // ────────── SEATBELT (unchanged) ──────────
           if (_seatbeltIsolateReady && _seatbeltSendPort != null) {
-            final resizedForModel = img.copyResize(image, width: 640, height: 640);
-            final inferenceJpeg = Uint8List.fromList(img.encodeJpg(resizedForModel));
+            // Resize for seatbelt model
+            final resizedSB = img.copyResize(image, width: 640, height: 640);
+            final sbJpeg = Uint8List.fromList(img.encodeJpg(resizedSB));
 
-            final originalJpeg = Uint8List.fromList(img.encodeJpg(image));
+            // Keep original for alerts
+            _latestSeatbeltJpeg =
+                Uint8List.fromList(img.encodeJpg(image));
 
-            _latestSeatbeltJpeg = originalJpeg;
-
+            // Send to seatbelt isolate
             _seatbeltSendPort!.send(<String, dynamic>{
               'replyPort': _fromIsolate.sendPort,
-              'imageBytes': inferenceJpeg,
+              'imageBytes': sbJpeg,
             });
-            debugPrint("📤 Sent a frame into seatbelt isolate");
+            debugPrint("📤 Sent frame to seatbelt isolate");
           }
 
-          if (_modelLoaded) {
-            await _runDistractionDetection(image);
+          // ────────── DISTRACTION (new) ──────────
+          if (_distReady && _distSendPort != null) {
+            final size = _discInputSize ?? 320;
+            final resizedDisc = img.copyResize(image, width: size, height: size);
+            final discJpeg    = Uint8List.fromList(img.encodeJpg(resizedDisc));
+
+            _distSendPort!.send(['getInputShape']);
+            debugPrint("📤 Sent frame to distraction isolate");
           }
         }
-
-          },
+      },
       onError: (e) {
         debugPrint('❌ FrameStream error: $e');
       },
       cancelOnError: true,
     );
   }
+
 
   Future<void> _runDistractionDetection(img.Image frame) async {
     debugPrint("🚀 Running distraction detection");
@@ -599,24 +659,28 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
         alignment: Alignment.center,
         children: [
           SizedBox(
-            key: ValueKey(_cameraViewKey),
+            key: _cameraViewKey,
             height: 500,
             width: 300,
             child: NativeView(
-              onViewCreated: (controller) async {
-
+              onViewCreated: (controller) {
                 _mpController = controller;
 
-                // Now start listening—PixelCopy will succeed:
+                // 1️⃣ Listen for landmarks as soon as the view is up:
                 controller.landMarksStream.listen((landmarks) {
+                  // a) Fire up frame-stream subscription on first-ever landmark
+                  if (_frameSubscription == null) {
+                    debugPrint("✅ Detected first landmark → now subscribing to frames");
+                    _listenToFrameStream();
+                  }
+                  // b) Continue to handle landmark-based logic
                   if (_isAnalyzing) _onLandmarkStream(landmarks);
                 });
 
                 if (!_seatbeltIsolateReady) _spawnSeatbeltIsolate();
+                if (!_distReady)          _spawnDistractionIsolate();
               },
             ),
-
-
           ),
 
           // Black overlay when not analyzing:

@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
+import 'dart:typed_data';
 
 class Detection {
   final int classIndex;
@@ -201,8 +202,88 @@ class DistractionDetector {
     };
   }
 
+  /// ------------------- ADD THIS STATIC HELPER -------------------
+  /// Runs the same `run(img.Image)` logic, but on an already-loaded Interpreter.
+  /// Returns the per-class confidence scores.
+  static List<double> runWithInterpreter(
+      Interpreter interp,
+      img.Image frame, {
+        double objThreshold = 0.3,
+      }) {
+    // First, preprocess into nested input
+    // We need _inputSize, _channels, _numPreds — grab from tensors:
+    final inputShape = interp.getInputTensor(0).shape;   // [1, H, W, C]
+    final outputShape = interp.getOutputTensor(0).shape; // [1, channels, numPreds]
+    final inputSize = inputShape[1];
+    final channels  = outputShape[1];
+    final numPreds  = outputShape[2];
 
+    // Preprocess exactly as your instance method:
+    final resized = img.copyResize(frame, width: inputSize, height: inputSize);
+    final nested = List.generate(
+      1,
+          (_) => List.generate(
+        inputSize,
+            (_) => List.generate(
+          inputSize,
+              (_) => List.filled(3, 0.0),
+        ),
+      ),
+    );
+    for (var y = 0; y < inputSize; y++) {
+      for (var x = 0; x < inputSize; x++) {
+        final px = resized.getPixel(x, y);
+        nested[0][y][x][0] = px.getChannel(img.Channel.red)   / 255.0;
+        nested[0][y][x][1] = px.getChannel(img.Channel.green) / 255.0;
+        nested[0][y][x][2] = px.getChannel(img.Channel.blue)  / 255.0;
+      }
+    }
 
+    // Prepare output buffer [1][channels][numPreds]
+    final output = List.generate(
+      1,
+          (_) => List.generate(
+        channels,
+            (_) => List<double>.filled(numPreds, 0.0),
+      ),
+    );
+
+    // Run the model
+    interp.run(nested, output);
+    final raw = output[0]; // shape: [channels][numPreds]
+
+    // Compute per-class max scores
+    final classCount = channels - 5;
+    final classMax = List<double>.filled(classCount, 0.0);
+
+    for (var i = 0; i < numPreds; i++) {
+      final objC = raw[4][i];
+      if (objC < objThreshold) continue;
+      for (var k = 0; k < classCount; k++) {
+        final score = raw[5 + k][i] * objC;
+        if (score > classMax[k]) classMax[k] = score;
+      }
+    }
+
+    return classMax;
+  }
+
+  /// Loads the TFLite model from a raw byte buffer (for use inside an isolate).
+  Future<void> loadModelFromBuffer(Uint8List buffer) async {
+    _interp = Interpreter.fromBuffer(
+      buffer,
+      options: InterpreterOptions()..threads = 4,
+    );
+    _interp.allocateTensors();
+
+    // Copy the exact same shape‐extraction logic from loadModel()
+    final inShape  = _interp.getInputTensor(0).shape;
+    final outShape = _interp.getOutputTensor(0).shape;
+    _inputSize = inShape[1];
+    _channels  = outShape[1];
+    _numPreds  = outShape[2];
+  }
+  /// --------------------------------------------------------------
 
   void close() => _interp.close();
 }
