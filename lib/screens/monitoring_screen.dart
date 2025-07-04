@@ -47,7 +47,6 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
   StreamSubscription? _fromIsolateSubscription;
   static const EventChannel _frameStream = EventChannel("flutter_mediapipe/frameStream");
   int? _cameraViewId;
-  final _detector = DistractionDetector();
   bool _modelLoaded = false;
   bool _isDistracted = false;
   String? _currentDistractionLabel;
@@ -232,23 +231,24 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
     final bytes = raw.buffer.asUint8List();
 
     _distReceivePort = ReceivePort();
-    await Isolate.spawn<List<dynamic>>(
-      distractionIsolateEntry,
-      [_distReceivePort.sendPort, bytes],
-    );
+    await Isolate.spawn(distractionIsolateEntry, [
+      _distReceivePort.sendPort,
+      bytes,
+    ]);
 
     _distReceivePort.listen((msg) {
-      if (msg is Map && msg.containsKey('inputSize')) {
-        _discInputSize = msg['inputSize'] as int;
-      }
       if (msg is SendPort) {
         _distSendPort = msg;
         _distReady    = true;
-        print("✅ [Main] distraction isolate ready");
       } else if (msg is DistractionResult) {
-          final idx  = msg.classIndex;
-          final conf = msg.confidence;
-        print("⬅️ [Main] distraction idx=$idx conf=$conf");
+        final idx       = msg.classIndex;
+        final conf      = msg.confidence;
+        final scores    = msg.scores;
+        final rawScores = msg.rawScores;
+
+        print("⬅️ [Main] RAW scores      = $rawScores");
+        print("⬅️ [Main] FILTERED scores = $scores");
+        print("⬅️ [Main] final idx=$idx conf=$conf");
 
         setState(() {
           if (idx < 0 || conf < 0.3) {
@@ -263,8 +263,9 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
         });
       }
     });
-  }
 
+
+  }
 
   void _spawnSeatbeltIsolate () async{
     print("🚀 [Main] Spawning seatbelt isolate...");
@@ -452,14 +453,18 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
             });
             debugPrint("📤 Sent frame to seatbelt isolate");
           }
+          const kDiscInputSize = 224;
 
           // ────────── DISTRACTION (new) ──────────
           if (_distReady && _distSendPort != null) {
-            final size = _discInputSize ?? 320;
-            final resizedDisc = img.copyResize(image, width: size, height: size);
-            final discJpeg    = Uint8List.fromList(img.encodeJpg(resizedDisc));
+            final resized = img.copyResize(image, width: kDiscInputSize, height: kDiscInputSize);
+            _distSendPort!.send(InferenceRequest(
+              kDiscInputSize,
+              kDiscInputSize,
+              Uint8List.fromList(img.encodeJpg(resized)),
+              _distReceivePort.sendPort,
+            ));
 
-            _distSendPort!.send(['getInputShape']);
             debugPrint("📤 Sent frame to distraction isolate");
           }
         }
@@ -470,37 +475,6 @@ class _MonitoringPageState extends State<MonitoringPage>  with WidgetsBindingObs
       cancelOnError: true,
     );
   }
-
-
-  Future<void> _runDistractionDetection(img.Image frame) async {
-    debugPrint("🚀 Running distraction detection");
-
-    final result = _detector.getTopClass(frame);
-    final int predictedClass = result['classIndex'];
-    final double confidence = result['confidence'];
-
-    final String predictedLabel = predictedClass == -1
-        ? "Safe Driving"
-        : distractionLabels[predictedClass];  // e.g., ["Drinking", "Eating", ...]
-
-    final bool distracted = predictedClass != -1;
-
-    setState(() {
-      _isDistracted = distracted;
-      _currentDistractionLabel = predictedLabel;
-      _currentDistractionConfidence = confidence;
-    });
-
-
-    if (distracted && _canSave(predictedLabel, cooldown: const Duration(seconds: 30))) {
-      debugPrint("📸 Saving snapshot for: $predictedLabel");
-      _addRecentAlert('$predictedLabel detected');
-      await _saveDetectionSnapshot(image: frame, alertType: predictedLabel);
-    }
-
-    _updateAlertSpeech();
-  }
-
 
   void _onLandmarkStream(NormalizedLandmarkList landmarkList) {
     if (!_isAnalyzing) return;

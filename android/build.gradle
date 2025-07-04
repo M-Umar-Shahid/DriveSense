@@ -9,7 +9,7 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.1.0' // Update Gradle Plugin if needed
+        classpath 'com.android.tools.build:gradle:8.3.0'// Update Gradle Plugin if needed
         classpath 'com.google.gms:google-services:4.3.15' // Latest Google Services Plugin
     }
 }

@@ -199,17 +199,13 @@ class _DashboardPageState extends State<Dashboard>
 
         const SizedBox(width: 16),
         Expanded(
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Welcome back,',
-                  style: TextStyle(color: Colors.white70)),
               const SizedBox(height: 4),
               Text(_username,
                   style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
-              Text('Month Summary Dashboard',
-                  style: TextStyle(color: Colors.white70)),
             ],
           ),
         ),
