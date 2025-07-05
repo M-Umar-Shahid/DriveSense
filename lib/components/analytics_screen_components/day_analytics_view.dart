@@ -11,8 +11,6 @@ import 'build_chart_container.dart';
 class DayAnalyticsView extends StatelessWidget {
   const DayAnalyticsView({
     super.key,
-    required this.showComparison,
-    required this.onComparisonChanged,
     required this.avgHourly,
     required this.peakHour,
     required this.hourlyCounts,
@@ -22,8 +20,6 @@ class DayAnalyticsView extends StatelessWidget {
     required this.onFilterChanged,
   });
 
-  final bool showComparison;
-  final ValueChanged<bool> onComparisonChanged;
   final double avgHourly;
   final int peakHour;
   final List<int> hourlyCounts;
@@ -126,28 +122,25 @@ class DayAnalyticsView extends StatelessWidget {
             // Hourly Trend
             Text('Hourly Trend', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text('Compare', style: TextStyle(color: Colors.grey[700])),
-                Switch(value: showComparison, onChanged: onComparisonChanged),
-              ],
-            ),
+
             const SizedBox(height: 8),
             Row(children: [
+              Expanded(child:
               MetricCard(
                 icon: Icons.show_chart,
                 label: 'Avg / hr',
                 value: avgHourly.toStringAsFixed(2),
                 gradient: [Colors.blue.shade400, Colors.blue.shade200],
               ),
+              ),
               const SizedBox(width: 12),
+              Expanded(child:
               MetricCard(
                 icon: Icons.access_time,
                 label: 'Peak Hour',
                 value: '$peakHour:00',
                 gradient: [Colors.purple.shade400, Colors.purple.shade200],
-              ),
+              ),)
             ]),
             const SizedBox(height: 20),
 

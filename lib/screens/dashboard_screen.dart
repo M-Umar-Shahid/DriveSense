@@ -1,4 +1,4 @@
-import 'package:drivesense/components/dashboard_screen_components/rounded_button.dart';
+import 'package:drivesense/screens/profile_page_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -16,7 +16,10 @@ import 'package:drivesense/screens/drivers_request_page.dart';
 import 'chat_screen.dart';
 
 class Dashboard extends StatefulWidget {
-  const Dashboard({Key? key}) : super(key: key);
+
+  final VoidCallback? onProfileTap;
+
+  const Dashboard({Key? key, this.onProfileTap}) : super(key: key);
   @override
   _DashboardPageState createState() => _DashboardPageState();
 }
@@ -159,7 +162,7 @@ class _DashboardPageState extends State<Dashboard>
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _buildWelcomeCard(),
+            _buildWelcomeCard(context),
             const SizedBox(height: 24),
             _buildOverviewCards(),
             const SizedBox(height: 24),
@@ -176,40 +179,48 @@ class _DashboardPageState extends State<Dashboard>
     );
   }
 
-  Widget _buildWelcomeCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Colors.blueAccent, Colors.purpleAccent],
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(children: [
-        CircleAvatar(
-          radius: 24,                               // whatever size you want
-          backgroundColor: Colors.white24,
-          backgroundImage: _imageUrl != null
-              ? NetworkImage(_imageUrl!)
-              : null,                               // no image → show child
-          child: _imageUrl == null
-              ? const Icon(Icons.person, color: Colors.white)
-              : null,                               // with image → no icon
-        ),
-
-        const SizedBox(width: 16),
-        Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 4),
-              Text(_username,
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-            ],
+  Widget _buildWelcomeCard(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onProfileTap,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Colors.blueAccent, Colors.purpleAccent],
           ),
+          borderRadius: BorderRadius.circular(16),
         ),
-      ]),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: Colors.white24,
+              backgroundImage: _imageUrl != null ? NetworkImage(_imageUrl!) : null,
+              child: _imageUrl == null
+                  ? const Icon(Icons.person, color: Colors.white)
+                  : null,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(  // Use Column for vertical layout!
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _username,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  // Optional subtitle line if needed
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

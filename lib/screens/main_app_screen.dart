@@ -24,7 +24,13 @@ class _MainAppScreenState extends State<MainAppScreen> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      const Dashboard(),
+      Dashboard(
+        onProfileTap: () {
+          setState(() {
+            _currentIndex = 2; // Profile tab index!
+          });
+        },
+      ),
       AnalyticsPage(driverId: _uid,showBack: false,),
       const ProfilePage(),
     ];

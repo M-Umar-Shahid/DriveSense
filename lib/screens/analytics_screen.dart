@@ -44,7 +44,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   int _peakWeekDay = 0;
 
   // Tabs state
-  bool _showComparison = false;
   String _selectedFilter = 'All';
   final _filters = ['All', 'Drowsy', 'No Seatbelt', 'Yawning'];
   DateTime _currentMonth = DateTime.now();
@@ -178,8 +177,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _buildDayTab() {
     return DayAnalyticsView(
-      showComparison: _showComparison,
-      onComparisonChanged: (val) => setState(() => _showComparison = val),
       avgHourly: _avgHourlyAlerts,
       peakHour: _peakHour,
       hourlyCounts: _hourlyCounts,
@@ -201,15 +198,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             const SizedBox(height: 12),
             // Use your existing metrics_section or gradient cards here…
           Row(
-                          children: [
-                        Expanded(
-                          child: MetricCard(
-                            icon: Icons.show_chart,
-                                label: 'Avg / day',
-                                value: _avgDailyAlerts.toStringAsFixed(2),
-                            gradient: [Colors.green.shade400, Colors.green.shade200],
-                          ),
-                      ),
+            children: [
+              Expanded(
+                child: MetricCard(
+                  icon: Icons.show_chart,
+                  label: 'Avg / day',
+                  value: _avgDailyAlerts.toStringAsFixed(2),
+                  gradient: [Colors.green.shade400, Colors.green.shade200],
+                ),),
                   const SizedBox(width: 12),
                   Expanded(
                     child: MetricCard(
