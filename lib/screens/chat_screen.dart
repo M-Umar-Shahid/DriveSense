@@ -1,16 +1,21 @@
+// lib/screens/chat_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'full_screen_image_view.dart'; // if you ever want to tap avatar
-import 'chat_screen.dart';
+import '../services/chat_service.dart';
+import 'full_screen_image_view.dart';
 
 class ChatScreen extends StatefulWidget {
   final String companyId;
   final String peerId;
 
-  const ChatScreen({Key? key, required this.companyId, required this.peerId})
-      : super(key: key);
+  const ChatScreen({
+    Key? key,
+    required this.companyId,
+    required this.peerId,
+  }) : super(key: key);
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -18,7 +23,8 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
-  final currentUser = FirebaseAuth.instance.currentUser;
+  final User? currentUser = FirebaseAuth.instance.currentUser;
+  final ChatService _chatService = ChatService();
 
   String _peerName = '';
   String _peerRole = '';
@@ -39,7 +45,8 @@ class _ChatScreenState extends State<ChatScreen> {
     if (data != null) {
       setState(() {
         _peerName = data['displayName'] ?? 'User';
-        _peerRole = data['role'] == 'company_admin' ? 'Admin' : 'Driver';
+        _peerRole =
+        data['role'] == 'company_admin' ? 'Admin' : 'Driver';
         _peerPhotoUrl = data['photoURL'] as String?;
       });
     }
@@ -47,6 +54,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Determine a simple chatDocId (you can replace with a more robust ID scheme)
     final isMe = currentUser!.uid != widget.peerId;
     final chatDocId = isMe ? widget.peerId : currentUser!.uid;
 
@@ -55,10 +63,10 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         backgroundColor: Colors.blueAccent,
         elevation: 2,
-        leading: BackButton(color: Colors.white),
+        leading: const BackButton(color: Colors.white),
         title: Row(
           children: [
-            // Avatar
+            // Avatar tappable to full‐screen view
             InkWell(
               borderRadius: BorderRadius.circular(24),
               onTap: _peerPhotoUrl != null
@@ -66,8 +74,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        FullScreenImageView(imageUrl: _peerPhotoUrl!),
+                    builder: (_) => FullScreenImageView(
+                      imageUrl: _peerPhotoUrl!,
+                    ),
                   ),
                 );
               }
@@ -83,7 +92,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   _peerName.isNotEmpty
                       ? _peerName[0].toUpperCase()
                       : '?',
-                  style: const TextStyle(color: Colors.white),
+                  style:
+                  const TextStyle(color: Colors.white),
                 )
                     : null,
               ),
@@ -96,23 +106,26 @@ class _ChatScreenState extends State<ChatScreen> {
                 Text(
                   _peerName,
                   style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold),
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Text(
                   _peerRole,
                   style: const TextStyle(
-                      color: Colors.white70, fontSize: 12),
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
           ],
         ),
       ),
-
       body: SafeArea(
         child: Column(
           children: [
-            // ── Messages ────────────────────────────
+            // ── Messages List ────────────────────
             Expanded(
               child: Container(
                 color: Colors.grey[50],
@@ -128,12 +141,15 @@ class _ChatScreenState extends State<ChatScreen> {
                   builder: (ctx, snap) {
                     if (!snap.hasData) {
                       return const Center(
-                          child: CircularProgressIndicator());
+                        child: CircularProgressIndicator(),
+                      );
                     }
                     final docs = snap.data!.docs;
                     return ListView.builder(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       itemCount: docs.length,
                       itemBuilder: (ctx, i) {
                         final msg = docs[i];
@@ -148,8 +164,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                 vertical: 4),
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 8),
-                            constraints:
-                            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                            constraints: BoxConstraints(
+                              maxWidth:
+                              MediaQuery.of(context).size.width *
+                                  0.75,
+                            ),
                             decoration: BoxDecoration(
                               color: isMine
                                   ? Colors.blueAccent
@@ -181,11 +200,11 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
 
-            // ── Input Bar ───────────────────────────
+            // ── Input Bar ─────────────────────────
             Container(
               color: Colors.white,
-              padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 8),
               child: Row(
                 children: [
                   Expanded(
@@ -195,10 +214,12 @@ class _ChatScreenState extends State<ChatScreen> {
                         hintText: "Type your message...",
                         filled: true,
                         fillColor: Colors.grey[100],
-                        contentPadding: const EdgeInsets.symmetric(
+                        contentPadding:
+                        const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 0),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
+                          borderRadius:
+                          BorderRadius.circular(24),
                           borderSide: BorderSide.none,
                         ),
                       ),
@@ -209,21 +230,23 @@ class _ChatScreenState extends State<ChatScreen> {
                     color: Colors.blueAccent,
                     shape: const CircleBorder(),
                     child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white),
+                      icon: const Icon(
+                        Icons.send,
+                        color: Colors.white,
+                      ),
                       onPressed: () async {
-                        final text = _controller.text.trim();
+                        final text =
+                        _controller.text.trim();
                         if (text.isEmpty) return;
-                        await FirebaseFirestore.instance
-                            .collection('companies')
-                            .doc(widget.companyId)
-                            .collection('chats')
-                            .doc(chatDocId)
-                            .collection('messages')
-                            .add({
-                          'text': text,
-                          'senderId': currentUser!.uid,
-                          'timestamp': FieldValue.serverTimestamp(),
-                        });
+
+                        // Use your ChatService to send + notify
+                        await _chatService.sendMessage(
+                          chatId: chatDocId,
+                          senderId: currentUser!.uid,
+                          recipientId: widget.peerId,
+                          text: text,
+                        );
+
                         _controller.clear();
                       },
                     ),

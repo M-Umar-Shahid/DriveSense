@@ -12,6 +12,11 @@ import '../screens/monitoring_screen.dart';
 import '../screens/companies_list_page.dart';
 import 'analytics_screen.dart';
 import 'package:drivesense/screens/drivers_request_page.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'chat_screen.dart';
 
@@ -27,6 +32,9 @@ class Dashboard extends StatefulWidget {
 class _DashboardPageState extends State<Dashboard>
     with SingleTickerProviderStateMixin {
   final _svc = DashboardService();
+  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FlutterLocalNotificationsPlugin _localNotif = FlutterLocalNotificationsPlugin();
   final _uid = FirebaseAuth.instance.currentUser!.uid;
   String? _imageUrl;
 
@@ -46,6 +54,7 @@ class _DashboardPageState extends State<Dashboard>
   @override
   void initState() {
     super.initState();
+    _setupFCM();
     final user = FirebaseAuth.instance.currentUser;
     _imageUrl = user?.photoURL;
     _animC = AnimationController(
@@ -55,6 +64,43 @@ class _DashboardPageState extends State<Dashboard>
     _fadeIn = CurvedAnimation(parent: _animC, curve: Curves.easeIn);
 
     _loadData();
+  }
+
+  Future<void> _setupFCM() async {
+    // iOS: request permissions
+    await _fcm.requestPermission();
+    // get the token
+    final token = await _fcm.getToken();
+    if (token != null) {
+      // save to Firestore so your Cloud Function can look it up
+      await _db.collection('users').doc(_uid).update({'fcmToken': token});
+    }
+
+    // Handle foreground messages
+    FirebaseMessaging.onMessage.listen(_handleMessage);
+    // Handle taps when app in background but not terminated
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
+  }
+
+  void _handleMessage(RemoteMessage msg) {
+    final n = msg.notification;
+    final data = msg.data; // contains your custom fields
+    if (n != null) {
+      _localNotif.show(
+        n.hashCode,
+        n.title,
+        n.body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            'driveSense',
+            'DriveSense Alerts',
+            importance: Importance.max,
+            priority: Priority.high,
+          ),
+        ),
+        payload: data['refId'], // for navigation
+      );
+    }
   }
 
   Future<void> _loadData() async {
