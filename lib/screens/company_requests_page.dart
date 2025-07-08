@@ -1,5 +1,8 @@
+// lib/screens/company_requests_page.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../services/company_service.dart';
 import '../services/request_service.dart';
@@ -31,7 +34,7 @@ class CompanyRequestsPage extends StatelessWidget {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding:  const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                 child: Row(
                   children: [
                     IconButton(
@@ -39,7 +42,7 @@ class CompanyRequestsPage extends StatelessWidget {
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                     const SizedBox(width: 8),
-                     const Text(
+                    const Text(
                       'Join Requests',
                       style: TextStyle(
                         color: Colors.white,
@@ -86,7 +89,10 @@ class CompanyRequestsPage extends StatelessWidget {
                     final timestamp = (data['timestamp'] as Timestamp).toDate();
 
                     return FutureBuilder<DocumentSnapshot>(
-                      future: FirebaseFirestore.instance.collection('users').doc(driverId).get(),
+                      future: FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(driverId)
+                          .get(),
                       builder: (ctx, userSnap) {
                         String name = 'Loading...';
                         String email = '';
@@ -139,7 +145,9 @@ class CompanyRequestsPage extends StatelessWidget {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        '${timestamp.toLocal()}'.split('.')[0],
+                                        DateFormat.yMMMd()
+                                            .add_jm()
+                                            .format(timestamp.toLocal()),
                                         style: const TextStyle(
                                           fontSize: 12,
                                           color: Colors.grey,
@@ -152,23 +160,26 @@ class CompanyRequestsPage extends StatelessWidget {
                                   children: [
                                     ElevatedButton(
                                       style: ElevatedButton.styleFrom(
-                                        foregroundColor: Colors.white, backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                        backgroundColor: Colors.green,
                                         minimumSize: const Size(80, 36),
                                       ),
                                       onPressed: () async {
-                                        // 1️⃣ mark the request accepted
-                                        await RequestService().respondToRequest(doc.id, true);
-
-                                        // 2️⃣ now actually hire the driver into your company
-                                        final driverId = data['fromId'] as String;
-                                        await CompanyService().addDriverToCompany(
+                                        // Accept
+                                        await RequestService()
+                                            .respondToRequest(doc.id, true);
+                                        await CompanyService()
+                                            .addDriverToCompany(
                                           companyId: companyId,
-                                          driverId:  driverId,
+                                          driverId: driverId,
                                         );
-
-                                        // 3️⃣ user feedback
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Request accepted — driver added')),
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Request accepted — driver added',
+                                            ),
+                                          ),
                                         );
                                       },
                                       child: const Text('Accept'),
@@ -176,14 +187,46 @@ class CompanyRequestsPage extends StatelessWidget {
                                     const SizedBox(height: 8),
                                     ElevatedButton(
                                       style: ElevatedButton.styleFrom(
-                                        foregroundColor: Colors.white, backgroundColor: Colors.redAccent,
+                                        foregroundColor: Colors.white,
+                                        backgroundColor: Colors.redAccent,
                                         minimumSize: const Size(80, 36),
                                       ),
                                       onPressed: () async {
-                                        await RequestService().respondToRequest(doc.id, false);
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Rejected')),
+                                        // Show confirmation dialog before reject
+                                        final confirm = await showDialog<bool>(
+                                          context: context,
+                                          builder: (ctx) => AlertDialog(
+                                            title:
+                                            const Text('Confirm Rejection'),
+                                            content: const Text(
+                                              'Are you sure you want to reject this request?',
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () =>
+                                                    Navigator.of(ctx)
+                                                        .pop(false),
+                                                child: const Text('No'),
+                                              ),
+                                              TextButton(
+                                                onPressed: () =>
+                                                    Navigator.of(ctx)
+                                                        .pop(true),
+                                                child: const Text('Yes'),
+                                              ),
+                                            ],
+                                          ),
                                         );
+
+                                        if (confirm == true) {
+                                          await RequestService()
+                                              .respondToRequest(doc.id, false);
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                                content: Text('Rejected')),
+                                          );
+                                        }
                                       },
                                       child: const Text('Reject'),
                                     ),

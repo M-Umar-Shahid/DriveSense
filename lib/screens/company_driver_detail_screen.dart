@@ -223,21 +223,35 @@ class DriverDetailPage extends StatelessWidget {
                       if (!snap.hasData) return SizedBox();
                       final assigns = (snap.data!.data()! as Map)['assignments'] as List;
                       return Column(
-                        children: assigns.map((a) {
-                          final hired = (a['dateHired'] as Timestamp).toDate();
-                          final left = a['dateLeft'] != null
-                              ? (a['dateLeft'] as Timestamp).toDate()
-                              : null;
-                          final active = a['status'] == 'active';
-                          return _TimelineTile(
-                            title: active ? 'Active' : 'Fired',
-                            dateRange:
-                            '${hired.toLocal().toIso8601String().split("T").first}'
-                                ' → '
-                                '${left!=null?left.toLocal().toIso8601String().split("T").first:"Present"}',
-                            color: active? Colors.green : Colors.red,
-                          );
-                        }).toList(),
+                          children: assigns.map((a) {
+                        final hired = (a['dateHired'] as Timestamp).toDate();
+                        final left = a['dateLeft'] != null
+                            ? (a['dateLeft'] as Timestamp).toDate()
+                            : null;
+
+                        final status = a['status'] as String? ?? '';
+                        late final String title;
+                        late final Color color;
+                        if (status == 'active') {
+                          title = 'Active';
+                          color = Colors.green;
+                        } else if (status == 'left') {
+                          title = 'Voluntary termination';
+                          color = Colors.orange;
+                        } else {
+                          title = 'Involuntary termination';
+                          color = Colors.red;
+                        }
+
+                        return _TimelineTile(
+                          title: title,
+                          dateRange:
+                          '${hired.toLocal().toIso8601String().split("T").first}'
+                              ' → '
+                              '${left != null ? left.toLocal().toIso8601String().split("T").first : "Present"}',
+                          color: color,
+                        );
+                      }).toList(),
                       );
                     },
                   ),

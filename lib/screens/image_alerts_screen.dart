@@ -1,3 +1,5 @@
+// lib/pages/image_alerts_page.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -6,7 +8,6 @@ import 'package:lottie/lottie.dart';
 import '../models/alert.dart';
 import '../services/image_alerts_service.dart';
 import 'full_screen_image_view.dart';
-import 'main_app_screen.dart';
 
 class ImageAlertsPage extends StatefulWidget {
   final String driverId;
@@ -25,7 +26,11 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
   DocumentSnapshot<Map<String, dynamic>>? _lastDoc;
   bool _loadingPage = false;
   bool _hasMore = true;
-  String _filter = 'All';
+
+  // filter state
+  String _filterType = 'All';
+  DateTime? _startDate;
+  DateTime? _endDate;
 
   @override
   void initState() {
@@ -54,8 +59,10 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
     setState(() => _loadingPage = true);
 
     final snap = await _service.fetchAlertsPage(
-      driverId: widget.driverId,  // ← pass the driverId
-      filter: _filter,
+      driverId: widget.driverId,
+      filterType: _filterType,
+      startDate: _startDate,
+      endDate: _endDate,
       pageSize: _pageSize,
       startAfterDoc: _lastDoc,
     );
@@ -74,25 +81,21 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
     setState(() => _loadingPage = false);
   }
 
-  Future<void> _openFilterMenu() async {
-    final choice = await showDialog<String>(
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
       context: context,
-      builder: (_) => SimpleDialog(
-        title: const Text('Filter by type'),
-        children: ['All', 'Drowsy', 'Distracted', 'No Seatbelt', 'Yawning']
-            .map((t) => SimpleDialogOption(
-          child: Text(t),
-          onPressed: () => Navigator.pop(context, t),
-        ))
-            .toList(),
-      ),
+      initialDate: _startDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
     );
-    if (choice != null && choice != _filter) {
+    if (picked != null) {
       setState(() {
-        _filter = choice;
+        _filterType = 'All';         // reset type filter
+        _startDate  = picked;
+        _endDate    = picked;       // same-day filter
         _alerts.clear();
-        _lastDoc = null;
-        _hasMore = true;
+        _lastDoc    = null;
+        _hasMore    = true;
       });
       _fetchNextPage();
     }
@@ -111,14 +114,23 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
           icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.of(context).pop(),
         ),
-
         actions: [
+          // Date picker button:
+          IconButton(
+            icon: const Icon(Icons.calendar_today, color: Colors.blueAccent),
+            onPressed: _pickDate,
+            tooltip: _startDate == null
+                ? 'Filter by date'
+                : 'Filtered: ${DateFormat.yMMMd().format(_startDate!)}',
+          ),
+          // Existing type‐filter menu button:
           IconButton(
             icon: const Icon(Icons.filter_list, color: Colors.blueAccent),
             onPressed: _openFilterMenu,
-          )
+          ),
         ],
       ),
+
       body: _alerts.isEmpty && _loadingPage
           ? const Center(child: CircularProgressIndicator())
           : Padding(
@@ -132,8 +144,7 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
             childAspectRatio: 3 / 4,
           ),
           itemCount: _alerts.length + (_hasMore ? 1 : 0),
-          itemBuilder: (BuildContext context, int index) {
-            // “Loading” indicator slot
+          itemBuilder: (context, index) {
             if (index >= _alerts.length) {
               return AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
@@ -152,14 +163,38 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
                     : const SizedBox.shrink(),
               );
             }
-
-            // Real alert card
-            final alert = _alerts[index];
-            return _buildAnimatedCard(alert);
+            return _buildAnimatedCard(_alerts[index]);
           },
         ),
       ),
     );
+  }
+
+  Future<void> _openFilterMenu() async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (_) => SimpleDialog(
+        title: const Text('Filter Alerts'),
+        children: [
+          ...['All', 'Drowsy', 'Distracted', 'No Seatbelt', 'Yawning']
+              .map((t) => SimpleDialogOption(
+            child: Text(t),
+            onPressed: () => Navigator.pop(context, t),
+          )),
+        ],
+      ),
+    );
+    if (choice == null || choice == _filterType) return;
+
+    setState(() {
+      _filterType = choice;
+      _startDate = null;
+      _endDate = null;
+      _alerts.clear();
+      _lastDoc = null;
+      _hasMore = true;
+    });
+    _fetchNextPage();
   }
 
   Widget _buildAnimatedCard(Alert a) {
@@ -186,27 +221,23 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
                   child: Image.network(
                     a.imageUrl,
                     fit: BoxFit.cover,
-                    // show a gray box while loading
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
+                    loadingBuilder: (ctx, child, prog) {
+                      if (prog == null) return child;
                       return Container(
                         color: Colors.grey.shade300,
                         child: const Center(
                           child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2)),
                         ),
                       );
                     },
-                    // optional: handle load errors
-                    errorBuilder: (context, error, stack) {
-                      return Container(
-                        color: Colors.grey.shade300,
-                        child: const Icon(Icons.broken_image, size: 48, color: Colors.grey),
-                      );
-                    },
+                    errorBuilder: (ctx, err, st) => Container(
+                      color: Colors.grey.shade300,
+                      child: const Icon(Icons.broken_image,
+                          size: 48, color: Colors.grey),
+                    ),
                   ),
                 ),
               ),
@@ -214,8 +245,8 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               child: Text(a.type,
-                  style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 14)),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -229,5 +260,4 @@ class _ImageAlertsPageState extends State<ImageAlertsPage> {
       ),
     );
   }
-
 }

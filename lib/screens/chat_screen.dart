@@ -241,12 +241,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
                         // Use your ChatService to send + notify
                         await _chatService.sendMessage(
+                          companyId: widget.companyId,   // ← new
                           chatId: chatDocId,
                           senderId: currentUser!.uid,
                           recipientId: widget.peerId,
                           text: text,
                         );
-
                         _controller.clear();
                       },
                     ),

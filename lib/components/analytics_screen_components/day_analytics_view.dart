@@ -33,11 +33,24 @@ class DayAnalyticsView extends StatelessWidget {
     final totalAlerts = hourlyCounts.fold<int>(0, (sum, v) => sum + v);
     final maxCount = hourlyCounts.isEmpty ? 0 : hourlyCounts.reduce(max);
 
-    // Breakdown by type
+    // ── 1. Compute “start of today” ───────────────────────
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+
+    // ── 2. Filter only today’s detections ─────────────────
+    final todaysDetections = recentDetections.where((d) {
+      final dt = d.timestamp.toLocal();
+      return dt.isAtSameMomentAs(startOfToday) || dt.isAfter(startOfToday);
+    }).toList();
+
+    // ── 3. Build totals & byType from *todays* only ──────
+    final totalAlertsToday = todaysDetections.length;
     final byType = <String,int>{};
-    for (var d in recentDetections) {
+    for (var d in todaysDetections) {
       byType[d.type] = (byType[d.type] ?? 0) + 1;
     }
+
+
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -47,14 +60,10 @@ class DayAnalyticsView extends StatelessWidget {
           children: [
             // Today's Summary + Pie
             Card(
+              color: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               elevation: 4,
-              child: Container(
-                // ← New: colored background for the summary + pie area
-                decoration: BoxDecoration(
-                  color: Colors.white,                    // change this to any Color you like
-                  borderRadius: BorderRadius.circular(16),
-                ),
+              child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
@@ -64,7 +73,7 @@ class DayAnalyticsView extends StatelessWidget {
                           child: _buildInfoCard(
                             context,
                             'Total Alerts',
-                            '$totalAlerts',
+                            '$totalAlertsToday',
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -72,44 +81,36 @@ class DayAnalyticsView extends StatelessWidget {
                           child: _buildInfoCard(
                             context,
                             'Peak Hour',
-                            '$peakHour:00',
+                            '$peakHour:00', // from props, or recompute from today’s data
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 20),
-                    Container(
-                      // ← New: background behind just the pie
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.all(8),
-                      child: SizedBox(
-                        height: 140,
-                        child: PieChart(
-                          PieChartData(
-                            sections: byType.entries.map((e) {
-                              final color = e.key == 'Drowsy'
-                                  ? Colors.redAccent
-                                  : e.key == 'No Seatbelt'
-                                  ? Colors.purple
-                                  : Colors.orangeAccent;
-                              return PieChartSectionData(
-                                value: e.value.toDouble(),
-                                title: '${e.key}\n${e.value}',
-                                color: color,
-                                radius: 40,
-                                titleStyle: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              );
-                            }).toList(),
-                            centerSpaceRadius: 30,
-                            sectionsSpace: 3,
-                          ),
+                    SizedBox(
+                      height: 140,
+                      child: PieChart(
+                        PieChartData(
+                          sections: byType.entries.map((e) {
+                            final color = e.key == 'Drowsy'
+                                ? Colors.redAccent
+                                : e.key == 'No Seatbelt'
+                                ? Colors.purple
+                                : Colors.orangeAccent;
+                            return PieChartSectionData(
+                              value: e.value.toDouble(),
+                              title: '${e.key}\n${e.value}',
+                              color: color,
+                              radius: 40,
+                              titleStyle: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            );
+                          }).toList(),
+                          centerSpaceRadius: 30,
+                          sectionsSpace: 3,
                         ),
                       ),
                     ),

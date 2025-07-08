@@ -1,7 +1,6 @@
 // lib/main.dart
 
 import 'dart:convert';
-import 'package:drivesense/screens/drivers_request_page.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
@@ -11,8 +10,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'utils/logger_util.dart';
 import 'screens/splash_screen.dart';
-import 'screens/chat_screen.dart';
-import 'screens/company_requests_page.dart';
 
 // Route observer for navigation tracking
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
@@ -61,51 +58,6 @@ void main() async {
 
   runApp(const MyApp());
 }
-
-// /// Parses the notification payload and navigates to the appropriate screen
-// void _handleNotificationNavigation(String? payload) {
-//   if (payload == null) return;
-//   final logger = LoggerUtil.getLogger('Main');
-//   try {
-//     final data = jsonDecode(payload) as Map<String, dynamic>;
-//     final type = data['type'] as String;
-//     final refId = data['refId'] as String;
-//
-//     switch (type) {
-//       case 'joinRequest':
-//       // Company views join requests
-//         navigatorKey.currentState?.push(
-//           MaterialPageRoute(
-//             builder: (_) => CompanyRequestsPage(companyId: '',),
-//           ),
-//         );
-//         break;
-//       case 'hireRequest':
-//       // Driver views hire requests
-//         navigatorKey.currentState?.push(
-//           MaterialPageRoute(
-//             builder: (_) => DriverRequestsPage(),
-//           ),
-//         );
-//         break;
-//       case 'chat':
-//         final companyId = data['companyId'] as String;
-//         navigatorKey.currentState?.push(
-//           MaterialPageRoute(
-//             builder: (_) => ChatScreen(
-//               companyId: companyId,
-//               peerId: refId,
-//             ),
-//           ),
-//         );
-//         break;
-//       default:
-//         logger.info('Unknown notification type: $type');
-//     }
-//   } catch (e, st) {
-//     LoggerUtil.getLogger('Main').severe('Navigation error', e, st);
-//   }
-// }
 
 class MyApp extends StatefulWidget {
   const MyApp({Key? key}) : super(key: key);

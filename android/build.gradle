@@ -21,6 +21,7 @@ allprojects {
     }
 }
 
+
 // Set build directories
 rootProject.buildDir = "../build"
 subprojects {

@@ -15,7 +15,6 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../model_inference/distraction_isolate.dart';
 import '../model_inference/seatbelt_isolate.dart';
-import '../utils/distraction_detector.dart';
 
 
 const int maxDet = 8400;

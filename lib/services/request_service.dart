@@ -31,6 +31,7 @@ class RequestService {
       type    : 'joinRequest',
       message : '🚚 ${uid.substring(0,6)} wants to join your fleet',
       refId   : reqDoc.id,
+      companyId  : companyId,
     );
 
     return true;
@@ -55,6 +56,7 @@ class RequestService {
       type    : 'hireRequest',
       message : '🏢 $companyId sent you a hire request',
       refId   : reqDoc.id,
+      companyId  : companyId,
     );
 
     return true;
@@ -82,6 +84,7 @@ class RequestService {
             ? '❌ Company $toId rejected your join request'
             : '❌ Driver $toId rejected your hire request'),
         refId: requestId,
+        companyId  : data['toId'],
       );
     }
   }

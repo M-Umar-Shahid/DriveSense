@@ -12,12 +12,14 @@ class NotificationService {
     required String type,
     required String message,
     String? refId,
+    required String companyId,
   }) {
     return _notifs.add({
       'to'       : toId,
       'type'     : type,
       'message'  : message,
       'refId'    : refId ?? '',
+      'companyId' : companyId,
       'isRead'   : false,
       'createdAt': FieldValue.serverTimestamp(),
     });

@@ -6,7 +6,9 @@ class AnalyticsService {
 
   /// Fetch most recent detections
   Future<List<Detection>> fetchRecentDetections(
-      String driverId, {int limit = 5}) async {
+      String driverId, {
+        int limit = 5,
+      }) async {
     final snap = await _db
         .collection('detections')
         .where('uid', isEqualTo: driverId)
@@ -15,17 +17,8 @@ class AnalyticsService {
         .get();
 
     return snap.docs.map((doc) {
-      final ts = (doc['timestamp'] as Timestamp).toDate();
-      final type = doc['alertType'] ?? 'Unknown';
-      String severity;
-      if (type == 'Drowsy' || type == 'Distraction') {
-        severity = 'High';
-      } else if (type == 'Yawning') {
-        severity = 'Medium';
-      } else {
-        severity = 'Low';
-      }
-      return Detection(type: type, timestamp: ts, severity: severity);
+      final data = doc.data();
+      return Detection.fromMap(data);
     }).toList();
   }
 

@@ -13,7 +13,7 @@ class EmailVerifyGatePage extends StatefulWidget {
 
 class _EmailVerifyGatePageState extends State<EmailVerifyGatePage> {
   final _auth = FirebaseAuth.instance;
-  StreamSubscription<User?>? _sub;
+  Timer? _timer;
   bool _sent = false;
 
   @override
@@ -21,12 +21,14 @@ class _EmailVerifyGatePageState extends State<EmailVerifyGatePage> {
     super.initState();
     _sendVerificationEmail();
 
-    // Listen to any token change (this fires when you reload or when the user clicks the link)
-    _sub = _auth.idTokenChanges().listen((user) async {
-      if (user == null) return;
-      await user.reload();
-      if (user.emailVerified) {
-        _sub?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (!mounted) return;
+      final u = _auth.currentUser;
+      if (u == null) return;
+      await u.reload();
+      if (!mounted) return;
+      if (u.emailVerified) {
+        _timer?.cancel();
         widget.onVerified();
       }
     });
@@ -34,21 +36,22 @@ class _EmailVerifyGatePageState extends State<EmailVerifyGatePage> {
 
   @override
   void dispose() {
-    _sub?.cancel();
+    _timer?.cancel();
     super.dispose();
   }
 
   Future<void> _sendVerificationEmail() async {
     final user = _auth.currentUser!;
-    if (_sent) return;
     try {
       await user.sendEmailVerification();
-      _sent = true;
+      setState(() => _sent = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Verification email sent')),
       );
     } catch (e) {
-      // Optionally show an error
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending email: $e')),
+      );
     }
   }
 
@@ -59,11 +62,21 @@ class _EmailVerifyGatePageState extends State<EmailVerifyGatePage> {
       body: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            'A verification link has been sent to your email.\n'
-                'Once you tap it, this screen will automatically continue—even if the app was in the background.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'A verification link has been sent to your email.\n'
+                    'Once you tap it, this screen will automatically continue—even if the app was in the background.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _sent ? _sendVerificationEmail : _sendVerificationEmail,
+                child: const Text('Resend verification email'),
+              ),
+            ],
           ),
         ),
       ),

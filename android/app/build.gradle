@@ -15,6 +15,7 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging:24.1.2") {
         exclude group: "com.google.firebase", module: "firebase-iid"
     }
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 }
 android {
     namespace = "com.example.drivesense"
@@ -22,9 +23,12 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
+               // Use Java 8 language features
+                sourceCompatibility JavaVersion.VERSION_1_8
+               targetCompatibility JavaVersion.VERSION_1_8
+               // Enable desugaring so new library APIs work on older Android
+                coreLibraryDesugaringEnabled true
+           }
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_1_8

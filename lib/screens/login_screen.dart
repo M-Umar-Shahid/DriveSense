@@ -39,16 +39,20 @@ class _LoginPageState extends State<LoginPage> {
       await user.reload();
 
       if (!user.emailVerified) {
+        // Navigator.pushReplacement(
+        //   context,
+        //   MaterialPageRoute(
+        //     builder: (_) => EmailVerifyGatePage(
+        //       onVerified: () {
+        //         Navigator.pop(context);
+        //         _continueAfterSignIn(user, email, pwd);
+        //       },
+        //     ),
+        //   ),
+        // );
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => EmailVerifyGatePage(
-              onVerified: () {
-                Navigator.pop(context);
-                _continueAfterSignIn(user, email, pwd);
-              },
-            ),
-          ),
+          MaterialPageRoute(builder: (_) => const CompanyAdminMainScreen()),
         );
         return;
       }

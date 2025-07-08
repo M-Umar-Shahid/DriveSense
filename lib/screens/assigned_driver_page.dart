@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'company_driver_detail_screen.dart';
 import 'package:intl/intl.dart';
+import 'company_driver_detail_screen.dart';
 
 class AssignedDriversPage extends StatefulWidget {
   final String companyId;
@@ -25,7 +25,10 @@ class _AssignedDriversPageState extends State<AssignedDriversPage> {
           elevation: 0,
           backgroundColor: Colors.white,
           leading: BackButton(color: Colors.black87),
-          title: Text('Drivers', style: theme.textTheme.headlineMedium!.copyWith(color: Colors.black87)),
+          title: Text(
+            'Drivers',
+            style: theme.textTheme.headlineMedium!.copyWith(color: Colors.black87),
+          ),
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(56),
             child: Container(
@@ -51,7 +54,7 @@ class _AssignedDriversPageState extends State<AssignedDriversPage> {
         ),
         body: Column(
           children: [
-            // ─── Search & Count ─────────────────────────────
+            // Search
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: TextField(
@@ -60,7 +63,8 @@ class _AssignedDriversPageState extends State<AssignedDriversPage> {
                   prefixIcon: const Icon(Icons.search),
                   filled: true,
                   fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                  contentPadding:
+                  const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide.none,
@@ -70,7 +74,7 @@ class _AssignedDriversPageState extends State<AssignedDriversPage> {
               ),
             ),
 
-            // ─── Tabs Content ────────────────────────────────
+            // Tabs Content
             Expanded(
               child: TabBarView(
                 children: [
@@ -106,10 +110,10 @@ class _DriverListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // choose the right stream
     final Stream<List<QueryDocumentSnapshot>> stream = isPast
         ? FirebaseFirestore.instance
-        .collection('users').where('role', isEqualTo: 'driver')
+        .collection('users')
+        .where('role', isEqualTo: 'driver')
         .where('companyHistory', arrayContains: companyId)
         .snapshots()
         .map((snap) => snap.docs.where((doc) {
@@ -129,7 +133,8 @@ class _DriverListView extends StatelessWidget {
       final ids = List<String>.from(snap.data()?['driverIds'] ?? []);
       if (ids.isEmpty) return [];
       return FirebaseFirestore.instance
-          .collection('users').where('role', isEqualTo: 'driver')
+          .collection('users')
+          .where('role', isEqualTo: 'driver')
           .where(FieldPath.documentId, whereIn: ids)
           .get()
           .then((q) => q.docs);
@@ -142,11 +147,10 @@ class _DriverListView extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
         var docs = snap.data ?? [];
-        // apply search
         if (search.isNotEmpty) {
           docs = docs.where((d) {
-            final nm = (d.data()! as Map)['displayName'] as String? ??
-                (d.data()! as Map)['email'] as String;
+            final m = d.data()! as Map<String, dynamic>;
+            final nm = (m['displayName'] as String?) ?? (m['email'] as String);
             return nm.toLowerCase().contains(search.toLowerCase());
           }).toList();
         }
@@ -167,20 +171,32 @@ class _DriverListView extends StatelessWidget {
             final doc = docs[i];
             final data = doc.data()! as Map<String, dynamic>;
 
-            // find assignment
+            // Assignment info
             final assigns = (data['assignments'] as List).cast<Map>();
             final myAssign = assigns.lastWhere(
                   (a) => a['companyId'] == companyId,
               orElse: () => {},
             );
-            final status = (myAssign['status'] as String?)?.toUpperCase() ?? '—';
+            final rawStatus = (myAssign['status'] as String?) ?? '';
+            late final String displayStatus;
+            late final Color statusColor;
+            if (rawStatus == 'active') {
+              displayStatus = 'Currently Active';
+              statusColor = Colors.green.shade700;
+            } else if (rawStatus == 'left') {
+              displayStatus = 'Voluntary\n\ntermination';
+              statusColor = Colors.orange.shade700;
+            } else {
+              displayStatus = 'Involuntary\n\ntermination';
+              statusColor = Colors.red.shade700;
+            }
             final dateHired = (myAssign['dateHired'] as Timestamp?)?.toDate();
             final dateLeft = (myAssign['dateLeft'] as Timestamp?)?.toDate();
 
-            // avatar data
+            // Avatar info
             final photoUrl = data['photoURL'] as String?;
-            final displayName = data['displayName'] as String? ??
-                (data['email'] as String);
+            final displayName =
+                (data['displayName'] as String?) ?? (data['email'] as String);
             final initial = displayName.isNotEmpty
                 ? displayName[0].toUpperCase()
                 : '?';
@@ -204,33 +220,31 @@ class _DriverListView extends StatelessWidget {
                     )
                   ],
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                 child: Row(
                   children: [
-                    // ── Avatar with fallback ───────────────
+                    // Avatar
                     CircleAvatar(
                       radius: 30,
                       backgroundColor: Colors.grey.shade200,
                       backgroundImage:
                       photoUrl != null ? NetworkImage(photoUrl) : null,
-                      // only provide the error handler when there's a NetworkImage
-                      onBackgroundImageError: photoUrl != null
-                          ? (_, __) {
-                        // maybe setState(() => _hadImageError = true);
-                      }
-                          : null,
-                      child: (photoUrl == null)
-                          ? Text(initial,
-                          style: TextStyle(
-                            fontSize: 24,
-                            color: Theme.of(context).primaryColorDark,
-                            fontWeight: FontWeight.bold,
-                          ))
+                      onBackgroundImageError: photoUrl != null ? (_, __) {} : null,
+                      child: photoUrl == null
+                          ? Text(
+                        initial,
+                        style: TextStyle(
+                          fontSize: 24,
+                          color: Theme.of(context).primaryColorDark,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
                           : null,
                     ),
                     const SizedBox(width: 16),
 
-                    // ── Details ───────────────────────────
+                    // Details
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,9 +252,7 @@ class _DriverListView extends StatelessWidget {
                           Text(
                             displayName,
                             style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
+                                fontSize: 16, fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 8),
                           Row(
@@ -249,49 +261,40 @@ class _DriverListView extends StatelessWidget {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: isPast
-                                      ? Colors.red.shade50
-                                      : Colors.green.shade50,
+                                  color: statusColor.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  status,
+                                  displayStatus,
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    color: isPast
-                                        ? Colors.red.shade700
-                                        : Colors.green.shade700,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                      color: statusColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600),
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              if (dateHired != null)
-                                Row(
-                                  children: [
-                                    const Icon(Icons.calendar_today,
-                                        size: 14, color: Colors.grey),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      DateFormat.yMMMd().format(dateHired),
-                                      style: const TextStyle(
-                                          fontSize: 13, color: Colors.grey),
-                                    ),
-                                  ],
+                              if (dateHired != null) ...[
+                                const Icon(Icons.calendar_today,
+                                    size: 14, color: Colors.grey),
+                                const SizedBox(width: 4),
+                                Text(
+                                  DateFormat.yMMMd().format(dateHired),
+                                  style: const TextStyle(
+                                      fontSize: 13, color: Colors.grey),
                                 ),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            isPast
-                                ? 'Left on ${dateLeft != null ? DateFormat.yMMMd().format(dateLeft) : '—'}'
-                                : 'Currently Active',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isPast
-                                  ? Colors.red.shade700
-                                  : Colors.green.shade700,
-                            ),
+                            rawStatus == 'active'
+                                ? 'Currently Active'
+                                : dateLeft != null
+                                ? 'Left on ${DateFormat.yMMMd().format(dateLeft)}'
+                                : '',
+                            style:
+                            TextStyle(fontSize: 13, color: statusColor),
                           ),
                         ],
                       ),

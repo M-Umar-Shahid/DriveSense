@@ -1,17 +1,47 @@
 // functions/index.js
 
-const functions = require('firebase-functions');
+const functions = require('firebase-functions/v1');
 const admin     = require('firebase-admin');
 admin.initializeApp();
 
-// Helper to send a push notification via FCM (unchanged)
-async function sendPush(toUid, title, body, data) {
-  const userSnap = await admin.firestore().collection('users').doc(toUid).get();
-  const userData = userSnap.data();
-  const token    = userData ? userData.fcmToken : null;
-  if (!token) return;
-  await admin.messaging().send({ token, notification: { title, body }, data });
-}
+exports.sendPushOnNotification = functions
+  .region('us-central1')
+  .firestore
+  .document('notifications/{nid}')
+  .onCreate(async (snap, ctx) => {
+    const note    = snap.data();
+    const toUid   = note.to;
+    if (!toUid) return null;
+
+    const userDoc = await admin.firestore().doc(`users/${toUid}`).get();
+    const fcmToken = userDoc.get('fcmToken');
+    if (!fcmToken) {
+      console.log('No FCM token for', toUid);
+      return null;
+    }
+
+    const notification = {
+      title: note.type === 'chat' ? 'New message' : 'Notification',
+      body:  note.message,
+    };
+    const data = {
+      type:      note.type,
+      refId:     note.refId || '',
+      companyId: note.companyId || '',
+    };
+
+    try {
+      await admin.messaging().send({
+        token:        fcmToken,
+        notification: notification,
+        data:         data,
+      });
+      console.log('Sent notification to', toUid);
+    } catch (err) {
+      console.error('Error sending FCM:', err);
+    }
+    return null;
+  });
 
 // 1) New Join-Company Request
 exports.onJoinRequest = functions.firestore

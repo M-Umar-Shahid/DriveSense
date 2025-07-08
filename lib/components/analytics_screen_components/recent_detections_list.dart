@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/detection.dart';
+import '../../screens/full_screen_image_view.dart';
 
 class RecentDetectionsList extends StatelessWidget {
   final List<Detection> detections;
@@ -13,40 +14,54 @@ class RecentDetectionsList extends StatelessWidget {
     }
     return Column(
       children: detections.map((d) {
-        final time = DateFormat('MMM d, hh:mm a').format(d.timestamp);
+        final time = DateFormat('MMM d, hh:mm a').format(d.timestamp.toLocal());
         final color = d.severity == 'High'
             ? Colors.redAccent
             : d.severity == 'Medium'
             ? Colors.orangeAccent
             : Colors.green;
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 8, offset: const Offset(0,4))],
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.warning_amber, color: color),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(d.type, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(time, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                  ],
+        return InkWell(
+          onTap: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => FullScreenImageView(imageUrl: d.imageUrl),
+            ));
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                )
+              ],
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber, color: color),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(d.type, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text(time, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                    ],
+                  ),
                 ),
-              ),
-              Chip(
-                label: Text(d.severity),
-                backgroundColor: color.withOpacity(0.2),
-                labelStyle: TextStyle(color: color),
-              ),
-            ],
+                Chip(
+                  label: Text(d.severity),
+                  backgroundColor: color.withOpacity(0.2),
+                  labelStyle: TextStyle(color: color),
+                ),
+              ],
+            ),
           ),
         );
       }).toList(),
