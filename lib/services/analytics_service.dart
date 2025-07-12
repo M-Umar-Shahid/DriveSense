@@ -4,7 +4,7 @@ import '../models/detection.dart';
 class AnalyticsService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Fetch most recent detections
+  /// 1) Most recent N detections (for your “Recent Issues” lists)
   Future<List<Detection>> fetchRecentDetections(
       String driverId, {
         int limit = 5,
@@ -16,17 +16,36 @@ class AnalyticsService {
         .limit(limit)
         .get();
 
-    return snap.docs.map((doc) {
-      final data = doc.data();
-      return Detection.fromMap(data);
-    }).toList();
+    return snap.docs
+        .map((d) => Detection.fromMap(d.data()))
+        .toList();
   }
 
-  /// Weekly trends (counts per weekday)
-  Future<List<int>> fetchWeeklyTrends(String driverId) async {
+  /// 2) Hourly counts over the last 24h (for your day-view line chart)
+  Future<List<int>> fetchHourlyCounts(String driverId) async {
     final now = DateTime.now();
-    // cover last 7 days: 6 days ago → today
-    final cutOff = DateTime(now.year, now.month, now.day)
+    final cutOff = now.subtract(const Duration(hours: 24));
+
+    final snap = await _db
+        .collection('detections')
+        .where('uid', isEqualTo: driverId)
+        .where('timestamp', isGreaterThan: Timestamp.fromDate(cutOff))
+        .get();
+
+    var buckets = List<int>.filled(24, 0);
+    for (var doc in snap.docs) {
+      final ts = (doc['timestamp'] as Timestamp).toDate().toLocal();
+      buckets[ts.hour]++;
+    }
+    return buckets;
+  }
+
+  /// 3) Weekly trends: counts for each of the last 7 days
+  Future<List<int>> fetchWeeklyTrends(String driverId) async {
+    final todayMidnight =
+    DateTime.now().toLocal();
+    final cutOff =
+    DateTime(todayMidnight.year, todayMidnight.month, todayMidnight.day)
         .subtract(const Duration(days: 6));
 
     final snap = await _db
@@ -36,67 +55,68 @@ class AnalyticsService {
         isGreaterThanOrEqualTo: Timestamp.fromDate(cutOff))
         .get();
 
-    // buckets[0] = count from cutOff day, buckets[6] = today
     var buckets = List<int>.filled(7, 0);
     for (var doc in snap.docs) {
-      final dt = (doc['timestamp'] as Timestamp).toDate();
-      // normalize to midnight
+      final dt = (doc['timestamp'] as Timestamp).toDate().toLocal();
       final day = DateTime(dt.year, dt.month, dt.day);
       final idx = day.difference(cutOff).inDays;
-      if (idx >= 0 && idx < 7) {
-        buckets[idx]++;
-      }
+      if (idx >= 0 && idx < 7) buckets[idx]++;
     }
     return buckets;
   }
 
-
-  /// Monthly breakdown for given month
-  Future<Map<String,int>> fetchMonthlyBreakdownForMonth(
-      String driverId, DateTime month) async {
-    final start = DateTime(month.year, month.month, 1);
-    final next = DateTime(month.year, month.month + 1, 1);
-    final snap = await _db
-        .collection('detections')
-        .where('uid', isEqualTo: driverId)
-        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-        .where('timestamp', isLessThan: Timestamp.fromDate(next))
-        .get();
-
-    var counts = <String,int>{};
-    for (var doc in snap.docs) {
-      final type = doc['alertType'] as String? ?? 'Unknown';
-      counts[type] = (counts[type] ?? 0) + 1;
-    }
-    return counts;
-  }
-
-  /// Daily counts for given month
+  /// 4) Daily counts for a specific month (for your heatmap)
   Future<Map<DateTime,int>> fetchDailyCountsForMonth(
       String driverId, DateTime month) async {
     final start = DateTime(month.year, month.month, 1);
-    final next = DateTime(month.year, month.month + 1, 1);
+    final next  = DateTime(month.year, month.month + 1, 1);
+
     final snap = await _db
         .collection('detections')
         .where('uid', isEqualTo: driverId)
-        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('timestamp',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(start))
         .where('timestamp', isLessThan: Timestamp.fromDate(next))
         .get();
 
-    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-    var map = {
-      for (var d = 1; d <= daysInMonth; d++)
+    // initialize every day of the month to zero
+    final days = DateTime(month.year, month.month + 1, 0).day;
+    final map = {
+      for (var d = 1; d <= days; d++)
         DateTime(month.year, month.month, d): 0
     };
+
     for (var doc in snap.docs) {
-      final dt = (doc['timestamp'] as Timestamp).toDate();
+      final dt = (doc['timestamp'] as Timestamp).toDate().toLocal();
       final day = DateTime(dt.year, dt.month, dt.day);
       if (map.containsKey(day)) map[day] = map[day]! + 1;
     }
     return map;
   }
 
-  /// Total alerts, hours, recommendation
+  /// 5) Monthly breakdown by alertType (for your pie chart)
+  Future<Map<String,int>> fetchMonthlyBreakdownForMonth(
+      String driverId, DateTime month) async {
+    final start = DateTime(month.year, month.month, 1);
+    final next  = DateTime(month.year, month.month + 1, 1);
+
+    final snap = await _db
+        .collection('detections')
+        .where('uid', isEqualTo: driverId)
+        .where('timestamp',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('timestamp', isLessThan: Timestamp.fromDate(next))
+        .get();
+
+    final counts = <String,int>{};
+    for (var doc in snap.docs) {
+      final t = (doc.data()['alertType'] as String?) ?? 'Unknown';
+      counts[t] = (counts[t] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /// 6) Totals summary: totalAlerts, totalHours, recommendation
   Future<Map<String,dynamic>> fetchTotals(String driverId) async {
     final alertsSnap = await _db
         .collection('detections')
@@ -111,75 +131,69 @@ class AnalyticsService {
     double totalHours = 0;
     for (var doc in tripsSnap.docs) {
       final data = doc.data();
-      final start = (data['startTime'] as Timestamp).toDate();
-      final end = data.containsKey('endTime')
-          ? (data['endTime'] as Timestamp).toDate()
-          : null;
-      if (end != null) {
-        totalHours += end.difference(start).inMinutes / 60.0;
+      final startTs = data['startTime'] as Timestamp?;
+      final endTs   = data['endTime']   as Timestamp?;
+      if (startTs != null && endTs != null) {
+        totalHours +=
+            endTs.toDate().difference(startTs.toDate()).inMinutes / 60.0;
       }
     }
 
-    var typeCount = <String,int>{};
+    // find most common alertType
+    final typeCount = <String,int>{};
     for (var doc in alertsSnap.docs) {
-      final type = doc['alertType'] ?? 'Unknown';
-      typeCount[type] = (typeCount[type] ?? 0) + 1;
+      final t = (doc.data()['alertType'] as String?) ?? 'Unknown';
+      typeCount[t] = (typeCount[t] ?? 0) + 1;
     }
-    final most = typeCount.entries.fold<MapEntry<String,int>>(MapEntry('',0),
-            (prev, curr) => curr.value > prev.value ? curr : prev);
+    final most = typeCount.entries.fold<MapEntry<String,int>>(
+      MapEntry('', 0),
+          (prev, e) => e.value > prev.value ? e : prev,
+    );
 
-    String recommendation;
+    String rec;
     switch (most.key) {
       case 'Drowsy':
-        recommendation = 'Avoid drowsy driving';
+        rec = 'Avoid drowsy driving';
         break;
       case 'Yawning':
-        recommendation = 'Stay hydrated and rested';
+        rec = 'Stay hydrated and rested';
+        break;
+      case 'No Seatbelt':
+        rec = 'Always buckle up';
         break;
       case 'Distraction':
-        recommendation = 'Keep focus on the road';
+        rec = 'Keep your eyes on the road';
         break;
       default:
-        recommendation = 'Keep up the safe driving!';
+        rec = 'Keep up the safe driving!';
     }
 
     return {
       'totalAlerts': totalAlerts,
       'totalHours': totalHours,
-      'recommendation': recommendation,
+      'recommendation': rec,
     };
   }
 
-  /// Hourly counts last 24h
-  Future<List<int>> fetchHourlyCounts(String driverId) async {
-    final now = DateTime.now();
-    final snap = await _db
-        .collection('detections')
-        .where('uid', isEqualTo: driverId)
-        .where('timestamp', isGreaterThan: Timestamp.fromDate(now.subtract(Duration(hours:24))))
-        .get();
-
-    var buckets = List.filled(24,0);
-    for (var doc in snap.docs) {
-      final dt = (doc['timestamp'] as Timestamp).toDate();
-      buckets[dt.hour]++;
-    }
-    return buckets;
-  }
-
-  /// Last 30 days counts
+  /// 7) Last 30 days counts (for a longer heatmap if you ever need it)
   Future<Map<DateTime,int>> fetchLast30DaysCounts(String driverId) async {
-    final today = DateTime.now();
-    final start = DateTime(today.year, today.month, today.day).subtract(Duration(days:29));
+    final today = DateTime.now().toLocal();
+    final start = DateTime(today.year, today.month, today.day)
+        .subtract(const Duration(days: 29));
+
     final snap = await _db
         .collection('detections')
         .where('uid', isEqualTo: driverId)
-        .where('timestamp', isGreaterThan: Timestamp.fromDate(start))
+        .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
         .get();
 
-    var map = {for (var i=0;i<30;i++) DateTime(start.year, start.month, start.day+i):0};
+    final map = {
+      for (var i = 0; i < 30; i++)
+        DateTime(start.year, start.month, start.day + i): 0
+    };
+
     for (var doc in snap.docs) {
-      final dt = (doc['timestamp'] as Timestamp).toDate();
+      final dt = (doc['timestamp'] as Timestamp).toDate().toLocal();
       final day = DateTime(dt.year, dt.month, dt.day);
       if (map.containsKey(day)) map[day] = map[day]! + 1;
     }

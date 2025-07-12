@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../main.dart';
 import 'edit_profile_screen.dart';
 
@@ -144,9 +145,25 @@ class _ProfilePageState extends State<ProfilePage>
       ),
     );
     if (shouldLogout == true) {
+      final me = FirebaseAuth.instance.currentUser;
+      if (me != null) {
+        // 1) Remove token from Firestore so Cloud Functions won't send to it anymore
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(me.uid)
+            .update({ 'fcmToken': FieldValue.delete() });
+
+        // 2) Delete the local FCM token so this device unregisters itself
+        await FirebaseMessaging.instance.deleteToken();
+      }
+
+      // 3) Now sign out
       await FirebaseAuth.instance.signOut();
-      Navigator.of(context)
-          .pushReplacement(MaterialPageRoute(builder: (_) => const LoginSignupPage()));
+
+      // 4) And navigate back to your login/signup
+      Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LoginSignupPage())
+      );
     }
   }
 

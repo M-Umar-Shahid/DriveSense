@@ -7,17 +7,15 @@ class ChatService {
   final _db    = FirebaseFirestore.instance;
   final _notes = NotificationService();
 
+  /// Now chatId should *always* be the driver’s UID
   Future<void> sendMessage({
     required String companyId,
-    required String chatId,
+    required String chatId,    // <-- driverId
     required String senderId,
     required String recipientId,
     required String text,
   }) async {
-    print('Writing chat message to: '
-        '/companies/$companyId/chats/$chatId/messages');
-
-    // 1) Add message under companies/{companyId}/chats/{chatId}/messages
+    // 1️⃣  Write the message
     final msgDoc = await _db
         .collection('companies')
         .doc(companyId)
@@ -30,13 +28,15 @@ class ChatService {
       'timestamp': FieldValue.serverTimestamp(),
     });
 
-    // 2) Fire your in-app notification as before
-    await _notes.create(
-      toId    : recipientId,
-      type    : 'chat',
-      message : '💬 New message from ${senderId.substring(0,6)}',
-      refId   : msgDoc.id,
-      companyId  : companyId,
-    );
+    // 2️⃣  Only fire a notification if the message truly went to someone else
+    if (recipientId != senderId) {
+      await _notes.create(
+        toId     : recipientId,
+        type     : 'chat',
+        message  : '💬 New message from ${senderId.substring(0,6)}',
+        refId    : msgDoc.id,
+        companyId: companyId,
+      );
+    }
   }
 }

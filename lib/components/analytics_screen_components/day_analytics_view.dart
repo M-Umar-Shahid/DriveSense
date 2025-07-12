@@ -158,7 +158,8 @@ class DayAnalyticsView extends StatelessWidget {
               elevation: 1,
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Column(
+                child: Center(
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Insights', style: Theme.of(context).textTheme.titleMedium),
@@ -177,33 +178,28 @@ class DayAnalyticsView extends StatelessWidget {
                             text: '$peakHour:00',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          const TextSpan(text: ', which is '),
-                          TextSpan(
-                            text:
-                            '${((maxCount / (avgHourly>0?avgHourly:1)) * 100).round()}% above avg',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
                           const TextSpan(text: '.'),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    if (byType.containsKey('Drowsy'))
-                      RichText(
-                        text: TextSpan(
-                          style: Theme.of(context).textTheme.bodyMedium,
-                          children: [
-                            const TextSpan(text: '• Drowsiness accounted for '),
-                            TextSpan(
-                              text:
-                              '${((byType['Drowsy']! / (totalAlerts>0?totalAlerts:1)) * 100).round()}%',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            const TextSpan(text: ' of today’s alerts.'),
-                          ],
-                        ),
-                      ),
+                    // const SizedBox(height: 8),
+                    // if (byType.containsKey('Drowsy'))
+                    //   RichText(
+                    //     text: TextSpan(
+                    //       style: Theme.of(context).textTheme.bodyMedium,
+                    //       children: [
+                    //         const TextSpan(text: '• Drowsiness accounted for '),
+                    //         TextSpan(
+                    //           text:
+                    //           '${((byType['Drowsy']! / (totalAlerts>0?totalAlerts:1)) * 100).round()}%',
+                    //           style: const TextStyle(fontWeight: FontWeight.bold),
+                    //         ),
+                    //         const TextSpan(text: ' of today’s alerts.'),
+                    //       ],
+                    //     ),
+                    //   ),
                   ],
+                ),
                 ),
               ),
             ),

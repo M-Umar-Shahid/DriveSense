@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class CompanyAdminProfilePage extends StatefulWidget {
   final String companyId;
@@ -66,12 +67,26 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
       ),
     );
     if (doIt == true) {
+      // 1) Remove this device’s FCM token
+      await FirebaseMessaging.instance.deleteToken();
+
+      // 2) (Optional) remove it from the user document so Cloud Functions won’t send to you
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .update({ 'fcmToken': FieldValue.delete() });
+
+      // 3) Now sign out
       await FirebaseAuth.instance.signOut();
+
+      // 4) Navigate back to your login/signup page
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const LoginSignupPage()),
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
