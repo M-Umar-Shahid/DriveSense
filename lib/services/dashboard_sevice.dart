@@ -37,22 +37,35 @@ class DashboardService {
     );
   }
 
-
-
   Future<List<Trip>> fetchAllTrips({required String driverId}) async {
-    final snap = await FirebaseFirestore.instance
+    final snap = await _db
         .collection('trips')
         .where('uid', isEqualTo: driverId)
         .orderBy('startTime', descending: true)
         .get();
 
-    return snap.docs.map((doc) {
-      return Trip.fromMap(
-        doc.id,                  // document ID
-        doc.data() as Map<String, dynamic>,
-      );
-    }).toList();
+    return snap.docs
+    // 1️⃣ Try to build a Trip? but bail out if either timestamp is null
+        .map((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+
+      // safe‐cast to Timestamp?
+      final Timestamp? startTs = data['startTime'] as Timestamp?;
+      final Timestamp? endTs   = data['endTime']   as Timestamp?;
+
+      if (startTs == null || endTs == null) {
+        // skip this one entirely
+        return null;
+      }
+
+      // you know for sure these are non-null, so your fromMap will succeed
+      return Trip.fromMap(doc.id, data);
+    })
+    // 2️⃣ Drop all the nulls
+        .whereType<Trip>()
+        .toList();
   }
+
 
 
   Future<List<Alert>> fetchAlertsForTrip(String tripDocId) async {
@@ -84,12 +97,16 @@ class DashboardService {
         .limit(limit)
         .get();
 
-    return snap.docs.map((doc) {
-      return Trip.fromMap(
-        doc.id,
-        doc.data() as Map<String, dynamic>,
-      );
-    }).toList();
+    return snap.docs
+        .map((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final Timestamp? startTs = data['startTime'] as Timestamp?;
+      final Timestamp? endTs   = data['endTime']   as Timestamp?;
+      if (startTs == null || endTs == null) return null;
+      return Trip.fromMap(doc.id, data);
+    })
+        .whereType<Trip>()
+        .toList();
   }
 
 }
