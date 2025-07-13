@@ -7,12 +7,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import '../main.dart';
 import 'edit_profile_screen.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
-
   @override
   State<ProfilePage> createState() => _ProfilePageState();
 }
@@ -23,6 +21,7 @@ class _ProfilePageState extends State<ProfilePage>
   String? _imageUrl;
   bool _audioAlertsEnabled = true;
   bool _openToWork = false;
+  bool _canToggleOpenToWork = false;
 
   late AnimationController _animationController;
   late Animation<double> _profileAnimation;
@@ -51,16 +50,26 @@ class _ProfilePageState extends State<ProfilePage>
     );
     _animationController.forward();
 
-    // Load saved user data
+    // Load data
+    _checkCompanyHistory();
     _loadUserData();
     _loadOpenToWork();
     _loadAudioToggle();
   }
 
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
+  Future<void> _checkCompanyHistory() async {
+    final uid = user?.uid;
+    if (uid == null) return;
+    final snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    final data = snap.data() ?? {};
+    // Use companyHistory instead of assignments
+    final history = (data['companyHistory'] as List<dynamic>?) ?? [];
+    setState(() {
+      _canToggleOpenToWork = history.isNotEmpty;
+    });
   }
 
   Future<void> _loadUserData() async {
@@ -72,16 +81,15 @@ class _ProfilePageState extends State<ProfilePage>
   }
 
   Future<void> _loadOpenToWork() async {
-    if (user != null) {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user!.uid)
-          .get();
-      if (doc.exists) {
-        setState(
-                () => _openToWork = doc.data()?['openToWork'] as bool? ?? false);
-      }
-    }
+    final uid = user?.uid;
+    if (uid == null) return;
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    setState(() {
+      _openToWork = doc.data()?['openToWork'] as bool? ?? false;
+    });
   }
 
   Future<void> _loadAudioToggle() async {
@@ -93,7 +101,7 @@ class _ProfilePageState extends State<ProfilePage>
 
   Future<void> _saveAudioToggle(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    prefs.setBool('audio_alerts', value);
+    await prefs.setBool('audio_alerts', value);
   }
 
   Future<void> _pickAndUploadImage() async {
@@ -139,7 +147,7 @@ class _ProfilePageState extends State<ProfilePage>
           ),
           TextButton(
             onPressed: () => Navigator.pop(c, true),
-            child: const Text('Logout', style: TextStyle(color: Colors.blue)),
+            child: const Text('Logout', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -147,29 +155,32 @@ class _ProfilePageState extends State<ProfilePage>
     if (shouldLogout == true) {
       final me = FirebaseAuth.instance.currentUser;
       if (me != null) {
-        // 1) Remove token from Firestore so Cloud Functions won't send to it anymore
+        // remove token in Firestore
         await FirebaseFirestore.instance
             .collection('users')
             .doc(me.uid)
-            .update({ 'fcmToken': FieldValue.delete() });
-
-        // 2) Delete the local FCM token so this device unregisters itself
+            .update({'fcmToken': FieldValue.delete()});
+        // unregister this device from FCM
         await FirebaseMessaging.instance.deleteToken();
       }
-
-      // 3) Now sign out
       await FirebaseAuth.instance.signOut();
-
-      // 4) And navigate back to your login/signup
-      Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const LoginSignupPage())
-      );
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const LoginSignupPage()),
+        );
+      }
     }
   }
 
   @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // enforce light status bar icons on grey background
+    // light status bar icons
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.dark,
@@ -199,7 +210,6 @@ class _ProfilePageState extends State<ProfilePage>
                   padding: const EdgeInsets.fromLTRB(20, 30, 20, 20),
                   child: Column(
                     children: [
-                      // Avatar with gradient border
                       GestureDetector(
                         onTap: _pickAndUploadImage,
                         child: Container(
@@ -245,10 +255,7 @@ class _ProfilePageState extends State<ProfilePage>
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 24),
-
-                      // Name
                       Text(
                         displayName,
                         style: TextStyle(
@@ -264,10 +271,7 @@ class _ProfilePageState extends State<ProfilePage>
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 8),
-
-                      // Email pill
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 6),
@@ -284,9 +288,7 @@ class _ProfilePageState extends State<ProfilePage>
                             Text(
                               email,
                               style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey[600],
-                              ),
+                                  fontSize: 16, color: Colors.grey[600]),
                             ),
                           ],
                         ),
@@ -314,20 +316,24 @@ class _ProfilePageState extends State<ProfilePage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Open to work toggle
-                      _buildToggleCard(
-                        iconData: Icons.work_outline,
-                        title: 'Open to work',
-                        value: _openToWork,
-                        onChanged: (v) {
-                          setState(() => _openToWork = v);
-                          FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(user!.uid)
-                              .update({'openToWork': v});
-                        },
+                      // Open to work toggle (only if in a company)
+                      Opacity(
+                        opacity: _canToggleOpenToWork ? 1.0 : 0.5,
+                        child: _buildToggleCard(
+                          iconData: Icons.work_outline,
+                          title: 'Open to work',
+                          value: _openToWork,
+                          onChanged: _canToggleOpenToWork
+                              ? (v) {
+                            setState(() => _openToWork = v);
+                            FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user!.uid)
+                                .update({'openToWork': v});
+                          }
+                              : null,
+                        ),
                       ),
-
                       const SizedBox(height: 16),
 
                       // Audio alerts toggle
@@ -340,7 +346,6 @@ class _ProfilePageState extends State<ProfilePage>
                           _saveAudioToggle(v);
                         },
                       ),
-
                       const SizedBox(height: 16),
 
                       // Edit Profile
@@ -357,29 +362,8 @@ class _ProfilePageState extends State<ProfilePage>
                         },
                       ),
 
-                      const SizedBox(height: 16),
 
-                      // Change Password
-                      _buildOptionCard(
-                        iconData: Icons.lock_outlined,
-                        title: 'Change Password',
-                        subtitle: 'Send reset email',
-                        onTap: () async {
-                          if (user?.email != null) {
-                            await FirebaseAuth.instance
-                                .sendPasswordResetEmail(
-                                email: user!.email!);
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content:
-                                    Text('Password reset email sent!')),
-                              );
-                            }
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 50),
 
                       // Logout button
                       _buildActionButton(
@@ -403,7 +387,7 @@ class _ProfilePageState extends State<ProfilePage>
     required IconData iconData,
     required String title,
     required bool value,
-    required ValueChanged<bool> onChanged,
+    required ValueChanged<bool>? onChanged,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -432,7 +416,8 @@ class _ProfilePageState extends State<ProfilePage>
           ),
           child: Icon(iconData, color: Colors.blue, size: 22),
         ),
-        title: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        title:
+        Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         trailing: Switch(
           value: value,
           activeColor: Colors.blue,
@@ -456,13 +441,7 @@ class _ProfilePageState extends State<ProfilePage>
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Row(
           children: [
@@ -486,24 +465,18 @@ class _ProfilePageState extends State<ProfilePage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title,
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600)),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 3),
                   Text(subtitle,
-                      style: TextStyle(
-                          fontSize: 14, color: Colors.grey[600])),
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600])),
                 ],
               ),
             ),
             Container(
               width: 32,
               height: 32,
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.arrow_forward_ios,
-                  color: Colors.grey[500], size: 14),
+              decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+              child: Icon(Icons.arrow_forward_ios, color: Colors.grey[500], size: 14),
             ),
           ],
         ),
@@ -523,20 +496,14 @@ class _ProfilePageState extends State<ProfilePage>
       child: ElevatedButton.icon(
         onPressed: onTap,
         icon: Icon(iconData),
-        label: Text(title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        label: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         style: ElevatedButton.styleFrom(
           backgroundColor: isPrimary ? Colors.blue : Colors.white,
           foregroundColor: isPrimary ? Colors.white : Colors.grey[800],
           elevation: isPrimary ? 4 : 0,
-          shadowColor:
-          isPrimary ? Colors.blue.withOpacity(0.4) : Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: isPrimary ? Colors.transparent : Colors.grey[300]!,
-              width: 1,
-            ),
+            side: BorderSide(color: isPrimary ? Colors.transparent : Colors.grey[300]!, width: 1),
           ),
         ),
       ),

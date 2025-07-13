@@ -51,6 +51,7 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
         final assignsRaw = (u['assignments'] as List<dynamic>?) ?? [];
         final assigns =
         assignsRaw.cast<Map<String, dynamic>>();
+        final isInAnyCompany = assigns.any((a) => a['status'] == 'active');
 
         // helper to know if user has an active stint here:
         bool isMemberOf(String companyId) {
@@ -293,46 +294,66 @@ class _CompaniesListPageState extends State<CompaniesListPage> {
 
                                               // Action button
                                               if (!isMember)
-                                                ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor:
-                                                    const Color(0xFF1976D2),
-                                                    shape:
-                                                    RoundedRectangleBorder(
-                                                      borderRadius:
-                                                      BorderRadius.circular(
-                                                          16),
-                                                    ),
-                                                    padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 20,
-                                                        vertical: 12),
-                                                  ),
-                                                  onPressed: () async {
-                                                    final ok = await RequestService()
-                                                        .sendJoinRequest(
-                                                        companyId);
-                                                    ScaffoldMessenger.of(context)
-                                                      ..hideCurrentSnackBar()
-                                                      ..showSnackBar(
-                                                        SnackBar(
-                                                          content: Text(ok
-                                                              ? 'Join request sent'
-                                                              : 'Already requested'),
-                                                          behavior: SnackBarBehavior
-                                                              .floating,
+                                                FutureBuilder<bool>(
+                                                  future: RequestService().hasPendingJoinRequest(companyId),
+                                                  builder: (ctx, snap) {
+                                                    final isPending = snap.data == true;
+                                                    return ElevatedButton(
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor: isInAnyCompany || isPending
+                                                            ? Colors.grey
+                                                            : const Color(0xFF1976D2),
+                                                        shape: RoundedRectangleBorder(
+                                                          borderRadius: BorderRadius.circular(16),
                                                         ),
-                                                      );
+                                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                                      ),
+                                                      onPressed: () {
+                                                        if (isInAnyCompany) {
+                                                          ScaffoldMessenger.of(context)
+                                                            ..hideCurrentSnackBar()
+                                                            ..showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text(
+                                                                  'You’re already a member of a company.\n'
+                                                                      'Leave your current company before joining another.',
+                                                                ),
+                                                                behavior: SnackBarBehavior.floating,
+                                                              ),
+                                                            );
+                                                        } else if (isPending) {
+                                                          ScaffoldMessenger.of(context)
+                                                            ..hideCurrentSnackBar()
+                                                            ..showSnackBar(
+                                                              const SnackBar(
+                                                                content: Text('You’ve already requested to join.'),
+                                                                behavior: SnackBarBehavior.floating,
+                                                              ),
+                                                            );
+                                                        } else {
+                                                          RequestService().sendJoinRequest(companyId).then((ok) {
+                                                            ScaffoldMessenger.of(context)
+                                                              ..hideCurrentSnackBar()
+                                                              ..showSnackBar(
+                                                                SnackBar(
+                                                                  content: Text(
+                                                                    ok ? 'Join request sent' : 'Unable to send request',
+                                                                  ),
+                                                                  behavior: SnackBarBehavior.floating,
+                                                                ),
+                                                              );
+                                                            setState(() {}); // rebuild so FutureBuilder refires
+                                                          });
+                                                        }
+                                                      },
+                                                      child: Text(
+                                                        isPending ? 'Requested' : 'Join',
+                                                        style: const TextStyle(
+                                                            color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600
+                                                        ),
+                                                      ),
+                                                    );
                                                   },
-                                                  child: const Text(
-                                                    'Join',
-                                                    style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 14,
-                                                      fontWeight:
-                                                      FontWeight.w600,
-                                                    ),
-                                                  ),
                                                 )
                                               else
                                                 Column(

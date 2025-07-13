@@ -46,9 +46,11 @@ class _SignUpPageState extends State<SignUpPage> {
         email: email, password: password,
       );
 
+      // 1b) Send verification email
+      await cred.user!.sendEmailVerification();
+
       // 2) Update displayName
-      await cred.user!
-          .updateDisplayName(displayName);
+      await cred.user!.updateDisplayName(displayName);
       await cred.user!.reload();
 
       final uid = cred.user!.uid;
@@ -90,11 +92,13 @@ class _SignUpPageState extends State<SignUpPage> {
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(
+        SnackBar(
+          content: Text(
             _isCompanyAdmin
-                ? 'Company created – please log in.'
-                : 'Welcome, $displayName! Your face is now registered.'
-        )),
+                ? 'Company created – please verify your email then log in.'
+                : 'Welcome, $displayName! Check your inbox to verify your email.',
+          ),
+        ),
       );
     } on FirebaseAuthException catch (e) {
       setState(() => _isLoading = false);

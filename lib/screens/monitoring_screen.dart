@@ -81,12 +81,12 @@
 
 
 
-    final List<String> distractionLabels = [
-      "Drinking",
-      "Eating",
-      "Mobile Use",
-      "Smoking"
-    ];
+    // final List<String> distractionLabels = [
+    //   "Drinking",
+    //   "Eating",
+    //   "Mobile Use",
+    //   "Smoking"
+    // ];
 
     late final FlutterTts _tts;
     String? _currentAlert;
@@ -94,7 +94,7 @@
     final Map<String, Duration> _cooldowns = {
       'seatbelt':   Duration(seconds: 20),
       'drowsy':     Duration(seconds: 20),
-      'distraction':Duration(seconds: 20),
+      // 'distraction':Duration(seconds: 20),
       'yawning':    Duration(seconds: 20),
     };
 
@@ -140,9 +140,9 @@
       if (_noSeatbelt) {
         next = 'seatbelt';
       }
-      else if (_isDistracted) {
-        next = 'distraction';
-      }
+      // else if (_isDistracted) {
+      //   next = 'distraction';
+      // }
       else if (_isDrowsy) {
         next = 'drowsy';
       } else if (_isYawning) {
@@ -162,7 +162,7 @@
 
       final messages = {
         'seatbelt':    'Warning: No seatbelt detected. Please buckle up.',
-        'distraction': 'Warning: Distraction detected. Keep your eyes on the road.',
+        // 'distraction': 'Warning: Distraction detected. Keep your eyes on the road.',
         'drowsy':      'Alert: Drowsiness detected. Please stay focused.',
         'yawning':     'Alert: You are yawning. Please remain attentive.',
       };
@@ -196,8 +196,8 @@
       _seatbeltIsolate = null;
 
       // 7️⃣ Clean up the distraction isolate
-      _distSub?.cancel();
-      _distReceivePort.close();
+      // _distSub?.cancel();
+      // _distReceivePort.close();
 
       // 8️⃣ Remove observers and wakelock
       WidgetsBinding.instance.removeObserver(this);
@@ -225,46 +225,46 @@
       _mpController = null;
     }
 
-    Future<void> _spawnDistractionIsolate() async {
-      final raw = await rootBundle.load('assets/models/distraction.tflite');
-      final bytes = raw.buffer.asUint8List();
-
-      _distReceivePort = ReceivePort();
-      await Isolate.spawn(distractionIsolateEntry, [
-        _distReceivePort.sendPort,
-        bytes,
-      ]);
-
-      _distReceivePort.listen((msg) {
-        if (msg is SendPort) {
-          _distSendPort = msg;
-          _distReady    = true;
-        } else if (msg is DistractionResult) {
-          final idx       = msg.classIndex;
-          final conf      = msg.confidence;
-          final scores    = msg.scores;
-          final rawScores = msg.rawScores;
-
-          print("⬅️ [Main] RAW scores      = $rawScores");
-          print("⬅️ [Main] FILTERED scores = $scores");
-          print("⬅️ [Main] final idx=$idx conf=$conf");
-
-          setState(() {
-            if (idx < 0 || conf < 0.3) {
-              _isDistracted = false;
-              _currentDistractionLabel = 'Safe Driving';
-              _currentDistractionConfidence = 0.0;
-            } else {
-              _isDistracted = true;
-              _currentDistractionLabel = distractionLabels[idx];
-              _currentDistractionConfidence = conf;
-            }
-          });
-        }
-      });
-
-
-    }
+    // Future<void> _spawnDistractionIsolate() async {
+    //   final raw = await rootBundle.load('assets/models/distraction.tflite');
+    //   final bytes = raw.buffer.asUint8List();
+    //
+    //   _distReceivePort = ReceivePort();
+    //   await Isolate.spawn(distractionIsolateEntry, [
+    //     _distReceivePort.sendPort,
+    //     bytes,
+    //   ]);
+    //
+    //   _distReceivePort.listen((msg) {
+    //     if (msg is SendPort) {
+    //       _distSendPort = msg;
+    //       _distReady    = true;
+    //     } else if (msg is DistractionResult) {
+    //       final idx       = msg.classIndex;
+    //       final conf      = msg.confidence;
+    //       final scores    = msg.scores;
+    //       final rawScores = msg.rawScores;
+    //
+    //       print("⬅️ [Main] RAW scores      = $rawScores");
+    //       print("⬅️ [Main] FILTERED scores = $scores");
+    //       print("⬅️ [Main] final idx=$idx conf=$conf");
+    //
+    //       setState(() {
+    //         if (idx < 0 || conf < 0.3) {
+    //           _isDistracted = false;
+    //           _currentDistractionLabel = 'Safe Driving';
+    //           _currentDistractionConfidence = 0.0;
+    //         } else {
+    //           _isDistracted = true;
+    //           _currentDistractionLabel = distractionLabels[idx];
+    //           _currentDistractionConfidence = conf;
+    //         }
+    //       });
+    //     }
+    //   });
+    //
+    //
+    // }
 
     void _spawnSeatbeltIsolate () async{
       print("🚀 [Main] Spawning seatbelt isolate...");
@@ -455,17 +455,17 @@
             const kDiscInputSize = 224;
 
             // ────────── DISTRACTION (new) ──────────
-            if (_distReady && _distSendPort != null) {
-              final resized = img.copyResize(image, width: kDiscInputSize, height: kDiscInputSize);
-              _distSendPort!.send(InferenceRequest(
-                kDiscInputSize,
-                kDiscInputSize,
-                Uint8List.fromList(img.encodeJpg(resized)),
-                _distReceivePort.sendPort,
-              ));
-
-              debugPrint("📤 Sent frame to distraction isolate");
-            }
+            // if (_distReady && _distSendPort != null) {
+            //   final resized = img.copyResize(image, width: kDiscInputSize, height: kDiscInputSize);
+            //   _distSendPort!.send(InferenceRequest(
+            //     kDiscInputSize,
+            //     kDiscInputSize,
+            //     Uint8List.fromList(img.encodeJpg(resized)),
+            //     _distReceivePort.sendPort,
+            //   ));
+            //
+            //   debugPrint("📤 Sent frame to distraction isolate");
+            // }
           }
         },
         onError: (e) {
@@ -651,7 +651,7 @@
                   });
 
                   if (!_seatbeltIsolateReady) _spawnSeatbeltIsolate();
-                  if (!_distReady)          _spawnDistractionIsolate();
+                  // if (!_distReady)          _spawnDistractionIsolate();
                 },
               ),
             ),
@@ -766,13 +766,13 @@
                           _mouthOpenness > 0.2 ? Colors.red : Colors.green,
                           _mouthOpenness.clamp(0.0, 1.0)),
                       _statusIndicator('Seatbelt', _noSeatbelt ? Colors.red : Colors.green, 1),
-                      _statusIndicator(
-                        _isDistracted
-                            ? (_currentDistractionLabel ?? 'Distracted')
-                            : 'Safe Driving',
-                        _isDistracted ? Colors.red : Colors.green,
-                        _isDistracted ? _currentDistractionConfidence : 1.0,  // show full green
-                      ),
+                      // _statusIndicator(
+                      //   _isDistracted
+                      //       ? (_currentDistractionLabel ?? 'Distracted')
+                      //       : 'Safe Driving',
+                      //   _isDistracted ? Colors.red : Colors.green,
+                      //   _isDistracted ? _currentDistractionConfidence : 1.0,  // show full green
+                      // ),
                     ],
                   ),
                   const SizedBox(height: 20),

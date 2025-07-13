@@ -28,15 +28,37 @@ class ChatService {
       'timestamp': FieldValue.serverTimestamp(),
     });
 
-    // 2️⃣  Only fire a notification if the message truly went to someone else
-    if (recipientId != senderId) {
-      await _notes.create(
-        toId     : recipientId,
-        type     : 'chat',
-        message  : '💬 New message from ${senderId.substring(0,6)}',
-        refId    : msgDoc.id,
-        companyId: companyId,
-      );
+    // 2️⃣  Only create a notification if they're not talking to themselves
+    if (recipientId == senderId) return;
+
+    // 3️⃣  Look up the sender's name
+    String senderName = senderId.substring(0,6); // fallback
+
+    // Try the users collection first
+    final userSnap = await _db.collection('users').doc(senderId).get();
+    if (userSnap.exists) {
+      final data = userSnap.data()!;
+      if (data.containsKey('displayName')) {
+        senderName = data['displayName'] as String;
+      }
+    } else {
+      // If not a user, try the companies collection
+      final compSnap = await _db.collection('companies').doc(senderId).get();
+      if (compSnap.exists) {
+        final data = compSnap.data()!;
+        if (data.containsKey('companyName')) {
+          senderName = data['companyName'] as String;
+        }
+      }
     }
+
+    // 4️⃣  Fire the notification with the real name
+    await _notes.create(
+      toId     : recipientId,
+      type     : 'chat',
+      message  : '💬 New message from $senderName',
+      refId    : msgDoc.id,
+      companyId: companyId,
+    );
   }
 }

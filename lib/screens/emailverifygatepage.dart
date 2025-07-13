@@ -15,23 +15,14 @@ class _EmailVerifyGatePageState extends State<EmailVerifyGatePage> {
   final _auth = FirebaseAuth.instance;
   Timer? _timer;
   bool _sent = false;
+  bool _checking = false;
 
   @override
   void initState() {
     super.initState();
     _sendVerificationEmail();
 
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      if (!mounted) return;
-      final u = _auth.currentUser;
-      if (u == null) return;
-      await u.reload();
-      if (!mounted) return;
-      if (u.emailVerified) {
-        _timer?.cancel();
-        widget.onVerified();
-      }
-    });
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _autoCheck());
   }
 
   @override
@@ -55,6 +46,30 @@ class _EmailVerifyGatePageState extends State<EmailVerifyGatePage> {
     }
   }
 
+  Future<void> _autoCheck() async {
+    final u = _auth.currentUser;
+    if (u == null) return;
+    await u.reload();
+    if (u.emailVerified) {
+      _timer?.cancel();
+      widget.onVerified();
+    }
+  }
+
+  Future<void> _manualCheck() async {
+    setState(() => _checking = true);
+    final u = _auth.currentUser!;
+    await u.reload();
+    if (u.emailVerified) {
+      widget.onVerified();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Email still not verified.")),
+      );
+    }
+    setState(() => _checking = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -67,14 +82,33 @@ class _EmailVerifyGatePageState extends State<EmailVerifyGatePage> {
             children: [
               const Text(
                 'A verification link has been sent to your email.\n'
-                    'Once you tap it, this screen will automatically continue—even if the app was in the background.',
+                    'Tap it, then come back here or use the button below.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16),
               ),
               const SizedBox(height: 24),
+
+              // Resend button
               ElevatedButton(
-                onPressed: _sent ? _sendVerificationEmail : _sendVerificationEmail,
-                child: const Text('Resend verification email'),
+                onPressed: _sendVerificationEmail,
+                child: Text(_sent ? 'Resend verification email' : 'Send verification email'),
+              ),
+
+              const SizedBox(height: 12),
+
+              // I've verified button
+              ElevatedButton(
+                onPressed: _checking ? null : _manualCheck,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                ),
+                child: _checking
+                    ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                )
+                    : const Text("I've Verified"),
               ),
             ],
           ),

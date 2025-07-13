@@ -1,10 +1,16 @@
+// lib/screens/company_admin_profile_page.dart
+
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drivesense/screens/login_signup_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 
 class CompanyAdminProfilePage extends StatefulWidget {
   final String companyId;
@@ -20,6 +26,9 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
   late AnimationController _animCtrl;
   late Animation<double> _headerAnim;
   late Animation<double> _menuAnim;
+
+  // for picking & uploading logo
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -38,7 +47,6 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
     );
     _animCtrl.forward();
 
-    // Light status icons on white
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarIconBrightness: Brightness.dark,
       statusBarColor: Colors.transparent,
@@ -67,26 +75,38 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
       ),
     );
     if (doIt == true) {
-      // 1) Remove this device’s FCM token
       await FirebaseMessaging.instance.deleteToken();
-
-      // 2) (Optional) remove it from the user document so Cloud Functions won’t send to you
       final uid = FirebaseAuth.instance.currentUser!.uid;
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .update({ 'fcmToken': FieldValue.delete() });
-
-      // 3) Now sign out
       await FirebaseAuth.instance.signOut();
-
-      // 4) Navigate back to your login/signup page
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const LoginSignupPage()),
       );
     }
   }
 
+  Future<void> _changeLogo() async {
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+    if (picked == null) return;
+
+    final ref = FirebaseStorage.instance
+        .ref('company_logos/${widget.companyId}.jpg');
+
+    await ref.putFile(File(picked.path));
+    final url = await ref.getDownloadURL();
+
+    await FirebaseFirestore.instance
+        .collection('companies')
+        .doc(widget.companyId)
+        .update({'photoURL': url});
+    // StreamBuilder will rebuild automatically
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -105,8 +125,9 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
 
           final String name       = data['companyName']  as String? ?? '—';
           final String email      = data['email']        as String? ?? '—';
+          // use new photoURL first, fall back on old logoUrl
+          final String? photoURL  = data['photoURL']     as String?;
           final String? logoUrl   = data['logoUrl']      as String?;
-          final String desc       = data['description']  as String? ?? 'No description.';
           final List drivers      = data['driverIds']    as List<dynamic>? ?? [];
           final int driverCount   = drivers.length;
           final double avgRating  = (data['avgRating']  as num?)?.toDouble() ?? 0.0;
@@ -118,88 +139,99 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
             slivers: [
               // ─── Header ─────────────────────────────────
               SliverToBoxAdapter(
-                child: AnimatedBuilder(
-                  animation: _headerAnim,
-                  builder: (context, child) => Opacity(
-                    opacity: _headerAnim.value,
-                    child: Transform.translate(
-                      offset: Offset(0, 30 * (1 - _headerAnim.value)),
-                      child: child,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 64), // extra top padding
+                  child: AnimatedBuilder(
+                    animation: _headerAnim,
+                    builder: (context, child) => Opacity(
+                      opacity: _headerAnim.value,
+                      child: Transform.translate(
+                        offset: Offset(0, 30 * (1 - _headerAnim.value)),
+                        child: child,
+                      ),
                     ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 40, 20, 20),
-                    child: Column(
-                      children: [
-                        // Logo
-                        GestureDetector(
-                          // no edit here
-                          child: Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                      child: Column(
+                        children: [
+                          GestureDetector(
+                            onTap: _changeLogo,
+                            child: Stack(
+                              alignment: Alignment.bottomRight,
+                              children: [
+                                Container(
+                                  width: 120,
+                                  height: 120,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: CircleAvatar(
+                                      backgroundColor: Colors.white,
+                                      backgroundImage: (photoURL != null)
+                                          ? NetworkImage(photoURL)
+                                          : (logoUrl != null)
+                                          ? NetworkImage(logoUrl)
+                                          : null,
+                                      child: (photoURL==null && logoUrl==null)
+                                          ? const Icon(Icons.business, size: 48, color: Colors.grey)
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                                  ),
+                                  child: const Icon(Icons.edit, size: 20, color: Colors.blueAccent),
                                 ),
                               ],
                             ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(4),
-                              child: CircleAvatar(
-                                backgroundColor: Colors.white,
-                                backgroundImage:
-                                (logoUrl != null) ? NetworkImage(logoUrl) : null,
-                                child: logoUrl == null
-                                    ? const Icon(Icons.business,
-                                    size: 48, color: Colors.grey)
-                                    : null,
-                              ),
+                          ),
+
+                          const SizedBox(height: 16),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
                             ),
                           ),
-                        ),
-
-                        const SizedBox(height: 16),
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.email_outlined, size: 16, color: Colors.grey),
+                                const SizedBox(width: 8),
+                                Text(email, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                              ],
+                            ),
                           ),
-                        ),
-
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.email_outlined,
-                                  size: 16, color: Colors.grey),
-                              const SizedBox(width: 8),
-                              Text(
-                                email,
-                                style: const TextStyle(
-                                    color: Colors.grey, fontSize: 14),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -217,8 +249,7 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
                     ),
                   ),
                   child: Padding(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     child: Column(
                       children: [
                         Row(
@@ -250,15 +281,6 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
                                 value: createdAt,
                               ),
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildInfoCard(
-                                iconData: Icons.description_outlined,
-                                title: 'Has Description',
-                                value:
-                                desc.isNotEmpty ? 'Yes' : 'No',
-                              ),
-                            ),
                           ],
                         ),
                       ],
@@ -267,48 +289,33 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
                 ),
               ),
 
-              // ─── Description ──────────────────────────────
+              // ─── Logout Button ────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  child: Card(
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Description',
-                              style: TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 8),
-                          Text(
-                            desc,
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                        ],
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: _showLogoutDialog,
+                      icon: const Icon(Icons.logout, size: 20),
+                      label: const Text(
+                        'Log Out',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,      // ← here
+                        foregroundColor: Colors.white,
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
 
-              // ─── Logout Button ────────────────────────────
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                  child: _buildActionButton(
-                    title: 'Log Out',
-                    iconData: Icons.logout,
-                    isPrimary: true,
-                    onTap: _showLogoutDialog,
-                  ),
-                ),
-              ),
             ],
           );
         },
@@ -326,13 +333,7 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          )
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 4))],
       ),
       child: Row(
         children: [
@@ -341,10 +342,7 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
             height: 44,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  Colors.blue.withOpacity(0.1),
-                  Colors.blue.withOpacity(0.2)
-                ],
+                colors: [Colors.blue.withOpacity(0.1), Colors.blue.withOpacity(0.2)],
               ),
               borderRadius: BorderRadius.circular(12),
             ),
@@ -355,13 +353,9 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600)),
+                Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
-                Text(value,
-                    style:
-                    const TextStyle(fontSize: 14, color: Colors.grey)),
+                Text(value, style: const TextStyle(fontSize: 14, color: Colors.grey)),
               ],
             ),
           ),
@@ -382,17 +376,12 @@ class _CompanyAdminProfilePageState extends State<CompanyAdminProfilePage>
       child: ElevatedButton.icon(
         onPressed: onTap,
         icon: Icon(iconData, size: 20),
-        label: Text(title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        label: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         style: ElevatedButton.styleFrom(
-          backgroundColor:
-          isPrimary ? Colors.redAccent : Colors.white,
-          foregroundColor:
-          isPrimary ? Colors.white : Colors.grey[800],
+          backgroundColor: isPrimary ? Colors.redAccent : Colors.white,
+          foregroundColor: isPrimary ? Colors.white : Colors.grey[800],
           elevation: isPrimary ? 4 : 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
