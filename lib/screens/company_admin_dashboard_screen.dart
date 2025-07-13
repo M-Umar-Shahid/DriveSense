@@ -137,17 +137,6 @@ class _CompanyAdminDashboardState extends State<CompanyAdminDashboard> {
                   ),
                 ),
               ),
-
-              // Logout
-              IconButton(
-                icon: const Icon(Icons.account_circle, color: Colors.white),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => CompanyAdminProfilePage(companyId: companyId)),
-                  );
-                },
-              ),
-
             ],
           ),
         ),

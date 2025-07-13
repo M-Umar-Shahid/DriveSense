@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../services/company_service.dart';
 import '../services/request_service.dart';
+import 'company_driver_detail_screen.dart';
 
 class CompanyRequestsPage extends StatelessWidget {
   final String companyId;
@@ -15,101 +16,76 @@ class CompanyRequestsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
-      body: Column(
-        children: [
-          // Gradient header
-          Container(
-            width: double.infinity,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF4285F4), Color(0xFF1976D2)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(32),
-                bottomRight: Radius.circular(32),
-              ),
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Join Requests',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+      // ── AppBar ───────────────────────────────────────────
+      appBar: AppBar(
+        title: const Text(
+          'Join Requests',
+          style: TextStyle(color: Colors.white),
+        ),
+        backgroundColor: const Color(0xFF1976D2),
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('requests')
+            .where('type', isEqualTo: 'join_company')
+            .where('toId', isEqualTo: companyId)
+            .where('status', isEqualTo: 'pending')
+            .orderBy('timestamp', descending: true)
+            .snapshots(),
+        builder: (ctx, snap) {
+          if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
+          if (!snap.hasData)  return const Center(child: CircularProgressIndicator());
+
+          final docs = snap.data!.docs;
+          if (docs.isEmpty) return const Center(child: Text('No join requests'));
+
+          return ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            itemCount: docs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (ctx, idx) {
+              final reqDoc = docs[idx];
+              final data   = reqDoc.data()! as Map<String, dynamic>;
+              final driverId  = data['fromId'] as String;
+              final timestamp = (data['timestamp'] as Timestamp).toDate();
+
+              return FutureBuilder<DocumentSnapshot>(
+                future: FirebaseFirestore.instance.collection('users').doc(driverId).get(),
+                builder: (ctx, userSnap) {
+                  if (!userSnap.hasData) {
+                    return const SizedBox(
+                      height: 100,
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  final udata = userSnap.data!.data() as Map<String, dynamic>? ?? {};
+                  final name  = udata['displayName'] as String? ?? 'Driver';
+                  final email = udata['email']       as String? ?? '';
+
+                  return InkWell(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DriverDetailPage(driverId: driverId),
+                        ),
+                      );
+                    },
+                    child: Card(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Requests list
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('requests')
-                  .where('type', isEqualTo: 'join_company')
-                  .where('toId', isEqualTo: companyId)
-                  .where('status', isEqualTo: 'pending')
-                  .orderBy('timestamp', descending: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return const Center(child: Text('Error loading requests'));
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final docs = snapshot.data!.docs;
-                if (docs.isEmpty) {
-                  return const Center(child: Text('No join requests'));
-                }
-
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                  itemCount: docs.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (ctx, idx) {
-                    final doc = docs[idx];
-                    final data = doc.data()! as Map<String, dynamic>;
-                    final driverId = data['fromId'] as String;
-                    final timestamp = (data['timestamp'] as Timestamp).toDate();
-
-                    return FutureBuilder<DocumentSnapshot>(
-                      future: FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(driverId)
-                          .get(),
-                      builder: (ctx, userSnap) {
-                        String name = 'Loading...';
-                        String email = '';
-                        if (userSnap.hasData && userSnap.data!.exists) {
-                          final u = userSnap.data!;
-                          name = u['displayName'] ?? 'Driver';
-                          email = u['email'] ?? '';
-                        }
-
-                        return Card(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: 2,
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
+                      elevation: 3,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // ── header row: avatar + name/email ───────────
+                            Row(
                               children: [
                                 CircleAvatar(
                                   radius: 24,
@@ -131,7 +107,7 @@ class CompanyRequestsPage extends StatelessWidget {
                                       Text(
                                         name,
                                         style: const TextStyle(
-                                          fontSize: 16,
+                                          fontSize: 18,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -143,107 +119,72 @@ class CompanyRequestsPage extends StatelessWidget {
                                           color: Colors.grey,
                                         ),
                                       ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        DateFormat.yMMMd()
-                                            .add_jm()
-                                            .format(timestamp.toLocal()),
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
                                     ],
                                   ),
                                 ),
-                                Column(
-                                  children: [
-                                    ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        foregroundColor: Colors.white,
-                                        backgroundColor: Colors.green,
-                                        minimumSize: const Size(80, 36),
-                                      ),
-                                      onPressed: () async {
-                                        // Accept
-                                        await RequestService()
-                                            .respondToRequest(doc.id, true);
-                                        await CompanyService()
-                                            .addDriverToCompany(
-                                          companyId: companyId,
-                                          driverId: driverId,
-                                        );
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Request accepted — driver added',
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      child: const Text('Accept'),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        foregroundColor: Colors.white,
-                                        backgroundColor: Colors.redAccent,
-                                        minimumSize: const Size(80, 36),
-                                      ),
-                                      onPressed: () async {
-                                        // Show confirmation dialog before reject
-                                        final confirm = await showDialog<bool>(
-                                          context: context,
-                                          builder: (ctx) => AlertDialog(
-                                            title:
-                                            const Text('Confirm Rejection'),
-                                            content: const Text(
-                                              'Are you sure you want to reject this request?',
-                                            ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () =>
-                                                    Navigator.of(ctx)
-                                                        .pop(false),
-                                                child: const Text('No'),
-                                              ),
-                                              TextButton(
-                                                onPressed: () =>
-                                                    Navigator.of(ctx)
-                                                        .pop(true),
-                                                child: const Text('Yes'),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-
-                                        if (confirm == true) {
-                                          await RequestService()
-                                              .respondToRequest(doc.id, false);
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            const SnackBar(
-                                                content: Text('Rejected')),
-                                          );
-                                        }
-                                      },
-                                      child: const Text('Reject'),
-                                    ),
-                                  ],
+                                Text(
+                                  DateFormat.yMMMd().format(timestamp),
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
                                 ),
                               ],
                             ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
+
+                            const SizedBox(height: 12),
+
+                            // ── Accept / Reject buttons ───────────────────
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton.icon(
+                                  icon: const Icon(Icons.check, color: Colors.green),
+                                  label: const Text('Accept', style: TextStyle(color: Colors.green)),
+                                  onPressed: () async {
+                                    await RequestService().respondToRequest(reqDoc.id, true);
+                                    await CompanyService().addDriverToCompany(
+                                      companyId: companyId,
+                                      driverId: driverId,
+                                    );
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Request accepted — driver added')),
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                TextButton.icon(
+                                  icon: const Icon(Icons.close, color: Colors.redAccent),
+                                  label: const Text('Reject', style: TextStyle(color: Colors.redAccent)),
+                                  onPressed: () async {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (c) => AlertDialog(
+                                        title: const Text('Confirm Rejection'),
+                                        content: const Text('Reject this driver’s request?'),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('No')),
+                                          TextButton(onPressed: () => Navigator.pop(c, true),  child: const Text('Yes')),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirm == true) {
+                                      await RequestService().respondToRequest(reqDoc.id, false);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Request rejected')),
+                                      );
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
       ),
     );
   }
